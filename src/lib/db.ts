@@ -17,13 +17,13 @@ function getDB() {
 
 export async function findUserByEmail(email: string): Promise<StoredUser | null> {
   const db = getDB();
-  const result = await db.prepare('SELECT * FROM users WHERE email = ? COLLATE NOCASE').bind(email).first<StoredUser>();
+  const result = await db.prepare('SELECT * FROM users WHERE email = ? COLLATE NOCASE').bind(email).first();
   return result || null;
 }
 
 export async function findUserById(id: string): Promise<StoredUser | null> {
   const db = getDB();
-  const result = await db.prepare('SELECT * FROM users WHERE id = ?').bind(id).first<StoredUser>();
+  const result = await db.prepare('SELECT * FROM users WHERE id = ?').bind(id).first();
   return result || null;
 }
 
