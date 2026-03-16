@@ -1,3 +1,5 @@
+export const runtime = 'edge';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyPassword, createToken, createSessionCookie } from '@/lib/auth';
 import { findUserByEmail } from '@/lib/users';
