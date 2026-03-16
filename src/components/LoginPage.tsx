@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, ChevronRight } from 'lucide-react';
+
+const TURNSTILE_SITE_KEY = '0x4AAAAAACr241t07alup8tw';
 
 const FAMILY_QUICK_LOGIN = [
   { name: 'Dad', email: 'matt@thewillsons.com', icon: 'dad' },
@@ -187,6 +189,22 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [selectedMember, setSelectedMember] = useState<string | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState('');
+  const turnstileRef = useRef<HTMLDivElement>(null);
+
+  // Load Turnstile script
+  useEffect(() => {
+    (window as any).onTurnstileSuccess = (token: string) => {
+      setTurnstileToken(token);
+    };
+    if (!document.getElementById('turnstile-script')) {
+      const script = document.createElement('script');
+      script.id = 'turnstile-script';
+      script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
+      script.async = true;
+      document.head.appendChild(script);
+    }
+  }, []);
 
   const handleQuickSelect = (member: (typeof FAMILY_QUICK_LOGIN)[0]) => {
     setSelectedMember(member.name);
@@ -198,10 +216,25 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    if (!turnstileToken) {
+      setError('Please complete the security check');
+      return;
+    }
+
     setIsLoading(true);
-    const result = await login(email, password);
-    if (result.success) { router.push('/dashboard'); }
-    else { setError(result.error || 'Login failed'); setIsLoading(false); }
+    const result = await login(email, password, turnstileToken);
+    if (result.success) {
+      router.push('/dashboard');
+    } else {
+      setError(result.error || 'Login failed');
+      setIsLoading(false);
+      // Reset Turnstile for retry
+      if ((window as any).turnstile && turnstileRef.current) {
+        (window as any).turnstile.reset(turnstileRef.current);
+        setTurnstileToken('');
+      }
+    }
   };
 
   return (
@@ -269,6 +302,18 @@ export default function LoginPage() {
                 </button>
               </div>
             </div>
+
+            {/* Turnstile CAPTCHA */}
+            <div className="flex justify-center">
+              <div
+                ref={turnstileRef}
+                className="cf-turnstile"
+                data-sitekey={TURNSTILE_SITE_KEY}
+                data-theme="dark"
+                data-callback="onTurnstileSuccess"
+              />
+            </div>
+
             {error && (<div style={{ fontSize: 13, textAlign: 'center', padding: '10px 16px', borderRadius: 10, background: 'rgba(139, 37, 0, 0.12)', color: '#f87171', border: '1px solid rgba(139, 37, 0, 0.25)' }}>{error}</div>)}
             <button type="submit" disabled={isLoading || !email || !password}
               className="w-full py-4 rounded-xl font-semibold text-sm uppercase transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"

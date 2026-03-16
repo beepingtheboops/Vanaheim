@@ -2,16 +2,43 @@ export const runtime = 'edge';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyPassword, createToken, createSessionCookie } from '@/lib/auth';
-import { findUserByEmail, logAuditEvent } from '@/lib/db';
+import { findUserByEmail, logAuditEvent, isAccountLocked, recordFailedLogin, clearFailedAttempts } from '@/lib/db';
+import { verifyTurnstile } from '@/lib/turnstile';
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password } = await request.json();
+    const { email, password, turnstileToken } = await request.json();
 
     if (!email || !password) {
       return NextResponse.json(
         { error: 'Email and password are required' },
         { status: 400 }
+      );
+    }
+
+    // Verify Turnstile token
+    if (!turnstileToken) {
+      return NextResponse.json(
+        { error: 'Please complete the security check' },
+        { status: 400 }
+      );
+    }
+
+    const ip = request.headers.get('cf-connecting-ip') || undefined;
+    const turnstileValid = await verifyTurnstile(turnstileToken, ip);
+    if (!turnstileValid) {
+      return NextResponse.json(
+        { error: 'Security check failed — please try again' },
+        { status: 403 }
+      );
+    }
+
+    // Check account lockout
+    const locked = await isAccountLocked(email);
+    if (locked) {
+      return NextResponse.json(
+        { error: 'Account temporarily locked. Try again in 15 minutes.' },
+        { status: 429 }
       );
     }
 
@@ -25,12 +52,15 @@ export async function POST(request: NextRequest) {
 
     const valid = await verifyPassword(password, user.password_hash);
     if (!valid) {
-      await logAuditEvent(user.id, 'login_failed', null, 'Invalid password');
+      await recordFailedLogin(email);
       return NextResponse.json(
         { error: 'Invalid email or password' },
         { status: 401 }
       );
     }
+
+    // Successful login — clear any failed attempts
+    await clearFailedAttempts(email);
 
     const token = await createToken({
       id: user.id,
