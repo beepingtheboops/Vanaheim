@@ -1,10 +1,4 @@
 /** @type {import('next').NextConfig} */
-const nextConfig = {
-  // Required for Cloudflare Pages deployment
-  output: 'export',
-  images: {
-    unoptimized: true,
-  },
-};
+const nextConfig = {};
 
 module.exports = nextConfig;
