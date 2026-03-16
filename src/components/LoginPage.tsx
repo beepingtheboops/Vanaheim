@@ -6,10 +6,10 @@ import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, ChevronRight } from 'lucide-react';
 
 const FAMILY_QUICK_LOGIN = [
-  { name: 'Dad', email: 'dad@thewillsons.com', icon: 'dad' },
-  { name: 'Noonie', email: 'mom@thewillsons.com', icon: 'noonie' },
-  { name: 'Abbat', email: 'alex@thewillsons.com', icon: 'abbat' },
-  { name: 'Odin', email: 'emma@thewillsons.com', icon: 'odin' },
+  { name: 'Dad', email: 'matt@thewillsons.com', icon: 'dad' },
+  { name: 'Noonie', email: 'noonie@thewillsons.com', icon: 'noonie' },
+  { name: 'Abbat', email: 'abbat@thewillsons.com', icon: 'abbat' },
+  { name: 'Odin', email: 'odin@thewillsons.com', icon: 'odin' },
 ];
 
 function DadIcon({ active }: { active: boolean }) {
