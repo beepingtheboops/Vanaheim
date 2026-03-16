@@ -6,7 +6,7 @@ compatibility_flags = ["nodejs_compat"]
 directory = ".vercel/output/static"
 not_found_handling = "single-page-application"
 html_handling = "auto-trailing-slash"
-serve_directly = true
+serve_directly = false
 
 [[d1_databases]]
 binding = "DB"
