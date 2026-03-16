@@ -1,12 +1,12 @@
 name = "vanaheim"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
-main = ".vercel/output/static/_worker.js/index.js"
 
 [assets]
 directory = ".vercel/output/static"
-binding = "ASSETS"
 not_found_handling = "single-page-application"
+html_handling = "auto-trailing-slash"
+serve_directly = true
 
 [[d1_databases]]
 binding = "DB"
