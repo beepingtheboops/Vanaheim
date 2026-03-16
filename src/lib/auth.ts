@@ -28,7 +28,7 @@ async function deriveKey(password: string, salt: Uint8Array): Promise<ArrayBuffe
 }
 
 function toHex(buffer: ArrayBuffer): string {
-  return [...new Uint8Array(buffer)].map(b => b.toString(16).padStart(2, '0')).join('');
+  return Array.from(new Uint8Array(buffer)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 function fromHex(hex: string): Uint8Array {
