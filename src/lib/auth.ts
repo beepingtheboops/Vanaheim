@@ -24,7 +24,7 @@ export interface AuthResult {
 async function deriveKey(password: string, salt: Uint8Array): Promise<ArrayBuffer> {
   const encoder = new TextEncoder();
   const keyMaterial = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']);
-  return crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: 100000 }, keyMaterial, 256);
+  return crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: salt as BufferSource, iterations: 100000 }, keyMaterial, 256);
 }
 
 function toHex(buffer: ArrayBuffer): string {
