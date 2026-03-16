@@ -10,63 +10,58 @@ export interface StoredUser {
   createdAt: string;
 }
 
-// ─── In-Memory Store (replace with D1 database in production) ─
-// Pre-seeded family members for demo purposes
-let users: StoredUser[] = [];
-let initialized = false;
+// ─── Pre-computed password hashes (PBKDF2-SHA256, 100k iterations) ──
+// These are deterministic — same salt + password = same hash every time.
+// admin123 password hash:
+const ADMIN_HASH = 'd07d4f95e0629139d65ed789d89dd7d7:e281ff4a0f5bb6a7059e1ae64554f5d729a6ac04eef11b8e0f6d38d59a9072aa';
+// member123 password hash:
+const MEMBER_HASH = '4e0188dc9dcdf46d6315c396688f6b04:8a1a2b678d7dd2dde82cd6ed16c2f0412a4c1a71015e057a0ece18a518e6e7a0';
 
-export async function initUsers() {
-  if (initialized) return;
-  initialized = true;
-
-  // Pre-seed demo accounts
-  users = [
-    {
-      id: 'usr_001',
-      name: 'Dad',
-      email: 'dad@thewillsons.com',
-      passwordHash: await hashPassword('admin123'),
-      role: 'admin',
-      avatar: '👨',
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: 'usr_002',
-      name: 'Mom',
-      email: 'mom@thewillsons.com',
-      passwordHash: await hashPassword('admin123'),
-      role: 'admin',
-      avatar: '👩',
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: 'usr_003',
-      name: 'Alex',
-      email: 'alex@thewillsons.com',
-      passwordHash: await hashPassword('member123'),
-      role: 'member',
-      avatar: '🧑',
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: 'usr_004',
-      name: 'Emma',
-      email: 'emma@thewillsons.com',
-      passwordHash: await hashPassword('member123'),
-      role: 'child',
-      avatar: '👧',
-      createdAt: new Date().toISOString(),
-    },
-  ];
-}
+// ─── Pre-seeded family members ──────────────────────────────────
+const users: StoredUser[] = [
+  {
+    id: 'usr_001',
+    name: 'Dad',
+    email: 'dad@thewillsons.com',
+    passwordHash: ADMIN_HASH,
+    role: 'admin',
+    avatar: 'dad',
+    createdAt: '2024-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'usr_002',
+    name: 'Noonie',
+    email: 'mom@thewillsons.com',
+    passwordHash: ADMIN_HASH,
+    role: 'admin',
+    avatar: 'noonie',
+    createdAt: '2024-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'usr_003',
+    name: 'Abbat',
+    email: 'alex@thewillsons.com',
+    passwordHash: MEMBER_HASH,
+    role: 'member',
+    avatar: 'abbat',
+    createdAt: '2024-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'usr_004',
+    name: 'Odin',
+    email: 'emma@thewillsons.com',
+    passwordHash: MEMBER_HASH,
+    role: 'child',
+    avatar: 'odin',
+    createdAt: '2024-01-01T00:00:00.000Z',
+  },
+];
 
 export async function findUserByEmail(email: string): Promise<StoredUser | null> {
-  await initUsers();
   return users.find((u) => u.email.toLowerCase() === email.toLowerCase()) || null;
 }
 
 export async function findUserById(id: string): Promise<StoredUser | null> {
-  await initUsers();
   return users.find((u) => u.id === id) || null;
 }
 
@@ -77,8 +72,6 @@ export async function createUser(data: {
   role: 'admin' | 'member' | 'child';
   avatar?: string;
 }): Promise<StoredUser> {
-  await initUsers();
-
   const existing = await findUserByEmail(data.email);
   if (existing) throw new Error('Email already registered');
 
@@ -88,7 +81,7 @@ export async function createUser(data: {
     email: data.email,
     passwordHash: await hashPassword(data.password),
     role: data.role,
-    avatar: data.avatar || '👤',
+    avatar: data.avatar || 'dad',
     createdAt: new Date().toISOString(),
   };
 
@@ -97,6 +90,5 @@ export async function createUser(data: {
 }
 
 export async function getAllUsers(): Promise<Omit<StoredUser, 'passwordHash'>[]> {
-  await initUsers();
   return users.map(({ passwordHash, ...rest }) => rest);
 }
