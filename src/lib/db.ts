@@ -12,7 +12,7 @@ export interface StoredUser {
 
 function getDB() {
   const { env } = getRequestContext();
-  return (env as any).DB as D1Database;
+  return (env as any).DB;
 }
 
 export async function findUserByEmail(email: string): Promise<StoredUser | null> {
