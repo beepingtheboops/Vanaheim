@@ -2,7 +2,7 @@ export const runtime = 'edge';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyPassword, createToken, createSessionCookie } from '@/lib/auth';
-import { findUserByEmail } from '@/lib/users';
+import { findUserByEmail, logAuditEvent } from '@/lib/db';
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,8 +23,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const valid = await verifyPassword(password, user.passwordHash);
+    const valid = await verifyPassword(password, user.password_hash);
     if (!valid) {
+      await logAuditEvent(user.id, 'login_failed', null, 'Invalid password');
       return NextResponse.json(
         { error: 'Invalid email or password' },
         { status: 401 }
@@ -38,6 +39,8 @@ export async function POST(request: NextRequest) {
       role: user.role,
       avatar: user.avatar,
     });
+
+    await logAuditEvent(user.id, 'login_success', null, null);
 
     const response = NextResponse.json({
       success: true,

@@ -1,12 +1,11 @@
 export const runtime = 'edge';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyToken, getTokenFromCookies } from '@/lib/auth';
-import { createUser } from '@/lib/users';
+import { verifyToken, getTokenFromCookies, hashPassword } from '@/lib/auth';
+import { findUserByEmail, createUser, logAuditEvent } from '@/lib/db';
 
 export async function POST(request: NextRequest) {
   try {
-    // Only admins can create new accounts
     const cookieHeader = request.headers.get('cookie');
     const token = getTokenFromCookies(cookieHeader);
 
@@ -31,7 +30,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const newUser = await createUser({ name, email, password, role, avatar });
+    if (password.length < 8) {
+      return NextResponse.json(
+        { error: 'Password must be at least 8 characters' },
+        { status: 400 }
+      );
+    }
+
+    const existing = await findUserByEmail(email);
+    if (existing) {
+      return NextResponse.json(
+        { error: 'Email already registered' },
+        { status: 400 }
+      );
+    }
+
+    const id = `usr_${Date.now().toString(36)}`;
+    const passwordHash = await hashPassword(password);
+
+    const newUser = await createUser({
+      id,
+      name,
+      email,
+      passwordHash,
+      role,
+      avatar: avatar || 'dad',
+    });
+
+    await logAuditEvent(currentUser.id, 'user_created', newUser.id, `Created user ${name}`);
 
     return NextResponse.json({
       success: true,

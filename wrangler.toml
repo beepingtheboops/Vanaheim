@@ -4,3 +4,8 @@ compatibility_flags = ["nodejs_compat"]
 
 [assets]
 directory = ".vercel/output/static"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "vanaheim-db"
+database_id = "a80343ec-10cf-4212-b3eb-64c670e58d17"
