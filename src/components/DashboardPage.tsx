@@ -268,6 +268,7 @@ export default function DashboardPage() {
     try {
       const res = await fetch(`${HA_WORKER}/api/ha/states`, {
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const states: HaState[] = await res.json();
