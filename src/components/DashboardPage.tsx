@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 
 // ─── Config ─────────────────────────────────────────────────────────────────
-const HA_WORKER = 'https://super-rain-384e.mattwillson.workers.dev';
+const HA_WORKER = '';
 const REFRESH_INTERVAL = 30_000;
 
 // ─── Entity IDs — update as you add devices to HA ───────────────────────────
@@ -266,9 +266,8 @@ export default function DashboardPage() {
 
   const fetchHaStates = useCallback(async () => {
     try {
-      const res = await fetch(`${HA_WORKER}/api/ha/states`, {
+      const res = await fetch(`/api/ha/states`, {
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const states: HaState[] = await res.json();
