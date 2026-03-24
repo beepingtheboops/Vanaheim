@@ -30,6 +30,7 @@ export async function POST(
 ) {
   const path = params.path.join('/');
   const haUrl = `${HA_WORKER}/api/ha/${path}`;
+  const body = await request.text();
 
   const response = await fetch(haUrl, {
     method: 'POST',
@@ -38,7 +39,7 @@ export async function POST(
       'Cookie': request.headers.get('Cookie') || '',
       'Origin': 'https://thewillsons.com',
     },
-    body: request.body,
+    body,
   });
 
   return new Response(response.body, {
