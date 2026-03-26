@@ -6,7 +6,7 @@
   Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
 
 /dashboard
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; connect-src 'self' https://super-rain-384e.mattwillson.workers.dev; frame-src challenges.cloudflare.com; img-src 'self' data:;
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-src challenges.cloudflare.com; img-src 'self' data:;
 
 /
   Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-src challenges.cloudflare.com; img-src 'self' data:;
