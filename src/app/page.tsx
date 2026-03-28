@@ -2,24 +2,7 @@
 import { useAuth } from '@/components/AuthProvider';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { ChevronRight } from 'lucide-react';
-
-function YggdrasilBg() {
-  return (
-    <div className="fixed inset-0 flex items-center justify-center pointer-events-none" style={{ opacity: 0.05 }}>
-      <svg width="1200" height="1400" viewBox="0 0 500 560" fill="none">
-        <circle cx="250" cy="250" r="230" stroke="#c9a84c" strokeWidth="2" />
-        <circle cx="250" cy="250" r="215" stroke="#c9a84c" strokeWidth="0.8" />
-        <ellipse cx="250" cy="120" rx="130" ry="75" fill="#c9a84c"/>
-        <ellipse cx="170" cy="148" rx="80" ry="55" fill="#c9a84c"/>
-        <ellipse cx="330" cy="148" rx="80" ry="55" fill="#c9a84c"/>
-        <path d="M228 220Q225 270 223 320Q221 360 219 400L281 400Q279 360 277 320Q275 270 272 220Z" fill="#c9a84c"/>
-        <path d="M219 395Q185 415 140 445Q105 465 75 478L80 486Q125 460 165 435Q200 418 224 405Z" fill="#c9a84c"/>
-        <path d="M281 395Q315 415 360 445Q395 465 425 478L420 486Q375 460 335 435Q300 418 276 405Z" fill="#c9a84c"/>
-      </svg>
-    </div>
-  );
-}
+import { ChevronRight, Plus } from 'lucide-react';
 
 function RuneParticles() {
   const runes = ['ᚠ','ᚢ','ᚦ','ᚨ','ᚱ','ᚲ','ᚷ','ᚹ','ᚺ','ᚾ','ᛁ','ᛃ','ᛇ','ᛈ','ᛉ','ᛊ','ᛏ','ᛒ','ᛖ','ᛗ','ᛚ','ᛜ','ᛞ','ᛟ'];
@@ -85,42 +68,104 @@ export default function Home() {
 
   return (
     <div className="grain-overlay min-h-screen flex items-center justify-center p-6 relative overflow-hidden">
+
+      {/* Base dark background */}
       <div className="fixed inset-0" style={{
-        background: 'radial-gradient(ellipse at 50% 30%, rgba(30,25,15,1) 0%, rgba(10,12,16,1) 60%, #000 100%)'
-      }} />
-      <YggdrasilBg />
-      <RuneParticles />
-      <div className="fixed inset-0 pointer-events-none" style={{
-        background: 'radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.6) 100%)'
+        background: 'radial-gradient(ellipse at 50% 30%, rgba(20,16,8,1) 0%, rgba(10,12,16,1) 60%, #000 100%)'
       }} />
 
+      {/* Yggdrasil image — gold tinted, faded */}
+      <div
+        className="fixed inset-0 flex items-center justify-center pointer-events-none"
+        style={{ opacity: 0.12 }}
+      >
+        <img
+          src="/yggdrasil.png"
+          alt=""
+          style={{
+            width: '70vmin',
+            height: '70vmin',
+            objectFit: 'contain',
+            filter: 'invert(1) sepia(1) saturate(4) hue-rotate(5deg) brightness(0.85)',
+          }}
+        />
+      </div>
+
+      {/* Vignette overlay */}
+      <div className="fixed inset-0 pointer-events-none" style={{
+        background: 'radial-gradient(ellipse at center, transparent 20%, rgba(0,0,0,0.75) 100%)'
+      }} />
+
+      <RuneParticles />
+
+      {/* Add to Home Screen button — top right */}
+      <div className="fixed top-4 right-4 z-50" style={{ animation: 'fadeInDown 1s ease forwards' }}>
+        <button
+          onClick={() => {
+            alert('To install: tap the Share button (iOS) or menu (Android) and select "Add to Home Screen"');
+          }}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-300"
+          style={{
+            background: 'rgba(12, 14, 20, 0.85)',
+            border: '1px solid rgba(201, 168, 76, 0.25)',
+            backdropFilter: 'blur(12px)',
+            color: '#c9a84c',
+            fontFamily: "'Cinzel', serif",
+            fontSize: 11,
+            letterSpacing: 1,
+            boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+          }}
+        >
+          <Plus size={13} strokeWidth={2} />
+          Add to Home Screen
+        </button>
+      </div>
+
+      {/* Main content */}
       <div className="relative z-10 w-full max-w-md text-center">
         <div style={{ animation: 'fadeInDown 1s ease forwards' }}>
           <VegvisirSymbol />
-          <h1 style={{
-            fontFamily: "'Cinzel', serif",
-            fontSize: 'clamp(32px, 7vw, 48px)',
-            fontWeight: 700,
-            letterSpacing: '6px',
-            color: '#c9a84c',
-            textShadow: '0 0 40px rgba(201,168,76,0.25)',
-            lineHeight: 1,
-            marginBottom: 4
-          }}>VANAHEIM</h1>
+
+          {/* Welcome to */}
           <p style={{
             fontFamily: "'Cinzel', serif",
-            fontSize: 12,
-            letterSpacing: 4,
+            fontSize: 13,
+            letterSpacing: 6,
             color: 'rgba(201,168,76,0.5)',
-            marginBottom: 6
+            marginBottom: 6,
+            textTransform: 'uppercase',
+          }}>Welcome to</p>
+
+          {/* VANAHEIM */}
+          <h1 style={{
+            fontFamily: "'Cinzel', serif",
+            fontSize: 'clamp(36px, 8vw, 56px)',
+            fontWeight: 700,
+            letterSpacing: '8px',
+            color: '#c9a84c',
+            textShadow: '0 0 40px rgba(201,168,76,0.3), 0 0 80px rgba(201,168,76,0.1)',
+            lineHeight: 1,
+            marginBottom: 10,
+          }}>VANAHEIM</h1>
+
+          {/* Subtitle */}
+          <p style={{
+            fontFamily: "'Cinzel', serif",
+            fontSize: 16,
+            letterSpacing: 3,
+            color: 'rgba(201,168,76,0.55)',
+            marginBottom: 6,
           }}>Willson Family Command Center</p>
-          <div className="flex items-center justify-center gap-3 mt-3 mb-12">
+
+          {/* Rune divider */}
+          <div className="flex items-center justify-center gap-3 mt-4 mb-12">
             <div className="h-px flex-1 max-w-20" style={{ background: 'linear-gradient(90deg, transparent, rgba(201,168,76,0.4))' }} />
             <span style={{ fontSize: 16, letterSpacing: 8, color: 'rgba(201,168,76,0.45)', fontFamily: "'Cinzel', serif" }}>ᚺ ᛟ ᛗ ᛖ</span>
             <div className="h-px flex-1 max-w-20" style={{ background: 'linear-gradient(270deg, transparent, rgba(201,168,76,0.4))' }} />
           </div>
         </div>
 
+        {/* Enter the Realm button */}
         <div style={{ animation: 'slideUp 0.8s ease forwards', animationDelay: '0.3s', opacity: 0, animationFillMode: 'forwards' }}>
           <button
             onClick={() => router.push('/login')}
@@ -128,16 +173,16 @@ export default function Home() {
             style={{
               background: 'linear-gradient(135deg, #8a6d2b 0%, #c9a84c 50%, #8a6d2b 100%)',
               color: '#0a0c10',
-              boxShadow: '0 4px 24px rgba(201, 168, 76, 0.15), inset 0 1px 0 rgba(232,212,139,0.3)',
+              boxShadow: '0 4px 24px rgba(201, 168, 76, 0.2), inset 0 1px 0 rgba(232,212,139,0.3)',
               fontFamily: "'Cinzel', serif",
-              letterSpacing: 4
+              letterSpacing: 4,
             }}
           >
             Enter the Realm <ChevronRight size={16} />
           </button>
         </div>
 
-        <div className="text-center mt-8" style={{ fontSize: 14, letterSpacing: 8, color: 'rgba(201,168,76,0.12)' }}>
+        <div className="text-center mt-8" style={{ fontSize: 14, letterSpacing: 8, color: 'rgba(201,168,76,0.1)' }}>
           ᚠ ᚢ ᚦ ᚨ ᚱ ᚲ ᚷ ᚹ
         </div>
       </div>
