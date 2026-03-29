@@ -164,14 +164,37 @@ export default function LoginPage() {
     (window as any).onTurnstileSuccess = (token: string) => {
       setTurnstileToken(token);
     };
-    if (!document.getElementById('turnstile-script')) {
-      const script = document.createElement('script');
-      script.id = 'turnstile-script';
-      script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
-      script.async = true;
-      document.head.appendChild(script);
-    }
   }, []);
+
+  // Load and render Turnstile only when password form becomes visible
+  useEffect(() => {
+    if (!showPasswordForm) return;
+
+    const renderTurnstile = () => {
+      if ((window as any).turnstile && turnstileRef.current && !turnstileToken) {
+        (window as any).turnstile.render(turnstileRef.current, {
+          sitekey: TURNSTILE_SITE_KEY,
+          theme: 'dark',
+          callback: (token: string) => setTurnstileToken(token),
+        });
+      }
+    };
+
+    if (!(window as any).turnstile) {
+      if (!document.getElementById('turnstile-script')) {
+        const script = document.createElement('script');
+        script.id = 'turnstile-script';
+        script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
+        script.async = true;
+        script.onload = () => setTimeout(renderTurnstile, 100);
+        document.head.appendChild(script);
+      } else {
+        setTimeout(renderTurnstile, 500);
+      }
+    } else {
+      setTimeout(renderTurnstile, 100);
+    }
+  }, [showPasswordForm]);
 
   const handleQuickSelect = async (member: (typeof FAMILY_QUICK_LOGIN)[0]) => {
     setSelectedMember(member.name);
@@ -179,6 +202,7 @@ export default function LoginPage() {
     setPassword('');
     setError('');
     setShowPasswordForm(false);
+    setTurnstileToken('');
 
     // If approved for passkey, try biometric auth immediately
     if (PASSKEY_EMAILS.includes(member.email)) {
@@ -430,10 +454,9 @@ export default function LoginPage() {
 
                 {/* Turnstile */}
                 <div className="flex justify-center">
-                  <div style={{ display: turnstileToken ? 'none' : 'block' }}>
-                    <div ref={turnstileRef} className="cf-turnstile" data-sitekey={TURNSTILE_SITE_KEY} data-theme="dark" data-callback="onTurnstileSuccess" />
-                  </div>
-                  {turnstileToken && (
+                  {!turnstileToken ? (
+                    <div ref={turnstileRef} />
+                  ) : (
                     <div className="flex items-center gap-2 text-xs py-2" style={{ color: 'rgba(34,197,94,0.7)', fontFamily: "'Cinzel', serif", letterSpacing: 2 }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
                       Verified
