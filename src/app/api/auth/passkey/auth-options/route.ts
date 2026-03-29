@@ -1,67 +1,65 @@
 export const runtime = 'edge';
-
-import { verifyToken, getTokenFromCookies } from '@/lib/auth';
-
-const HA_WORKER = 'https://super-rain-384e.mattwillson.workers.dev';
-
-async function authenticate(request: Request): Promise<boolean> {
-  const cookieHeader = request.headers.get('Cookie');
-  const token = getTokenFromCookies(cookieHeader);
-  if (!token) return false;
-  const user = await verifyToken(token);
-  return !!user;
-}
-
-export async function GET(
-  request: Request,
-  { params }: { params: { path: string[] } }
-) {
-  if (!await authenticate(request)) {
-    return new Response('Unauthorized', { status: 401 });
+ 
+import { NextRequest, NextResponse } from 'next/server';
+import { generateAuthenticationOptions } from '@simplewebauthn/server';
+import {
+  findUserByEmail,
+  getPasskeysForUser,
+  storeChallenge,
+} from '@/lib/db';
+ 
+const RP_ID = 'thewillsons.com';
+ 
+export async function POST(request: NextRequest) {
+  try {
+    const { email } = await request.json();
+ 
+    if (!email) {
+      return NextResponse.json({ error: 'Email required' }, { status: 400 });
+    }
+ 
+    const user = await findUserByEmail(email);
+    if (!user) {
+      // Return generic options to avoid user enumeration
+      const options = await generateAuthenticationOptions({
+        rpID: RP_ID,
+        userVerification: 'required',
+        allowCredentials: [],
+      });
+      return NextResponse.json(options);
+    }
+ 
+    const passkeys = await getPasskeysForUser(user.id);
+ 
+    if (passkeys.length === 0) {
+      return NextResponse.json({ error: 'No passkey registered' }, { status: 404 });
+    }
+ 
+    const allowCredentials = passkeys.map(pk => ({
+      id: pk.credential_id,
+      type: 'public-key' as const,
+      transports: pk.transports ? JSON.parse(pk.transports) : undefined,
+    }));
+ 
+    const options = await generateAuthenticationOptions({
+      rpID: RP_ID,
+      userVerification: 'required',
+      allowCredentials,
+    });
+ 
+    // Store challenge
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+    await storeChallenge({
+      id: crypto.randomUUID(),
+      userId: user.id,
+      challenge: options.challenge,
+      type: 'authentication',
+      expiresAt,
+    });
+ 
+    return NextResponse.json({ ...options, userId: user.id });
+  } catch (error) {
+    console.error('Passkey auth options error:', error);
+    return NextResponse.json({ error: 'Failed to generate authentication options' }, { status: 500 });
   }
-
-  const path = params.path.join('/');
-  const url = new URL(request.url);
-  const haUrl = `${HA_WORKER}/api/ha/${path}${url.search}`;
-
-  const response = await fetch(haUrl, {
-    headers: {
-      'Content-Type': 'application/json',
-      'Cookie': request.headers.get('Cookie') || '',
-      'Origin': 'https://thewillsons.com',
-    },
-  });
-
-  return new Response(response.body, {
-    status: response.status,
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
-
-export async function POST(
-  request: Request,
-  { params }: { params: { path: string[] } }
-) {
-  if (!await authenticate(request)) {
-    return new Response('Unauthorized', { status: 401 });
-  }
-
-  const path = params.path.join('/');
-  const haUrl = `${HA_WORKER}/api/ha/${path}`;
-  const body = await request.text();
-
-  const response = await fetch(haUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Cookie': request.headers.get('Cookie') || '',
-      'Origin': 'https://thewillsons.com',
-    },
-    body,
-  });
-
-  return new Response(response.body, {
-    status: response.status,
-    headers: { 'Content-Type': 'application/json' },
-  });
 }
