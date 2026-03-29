@@ -38,6 +38,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Passkey not found' }, { status: 404 });
     }
  
+    console.log('passkey found:', JSON.stringify({
+      id: passkey.id,
+      credential_id: passkey.credential_id,
+      counter: passkey.counter,
+      device_type: passkey.device_type,
+      transports: passkey.transports,
+      public_key_length: passkey.public_key?.length,
+    }));
+ 
+    const publicKeyBuffer = Buffer.from(passkey.public_key, 'base64');
+    console.log('public key buffer length:', publicKeyBuffer.length);
+ 
     const verifyOpts: any = {
       response: body,
       expectedChallenge,
@@ -45,23 +57,22 @@ export async function POST(request: NextRequest) {
       expectedRPID: RP_ID,
       credential: {
         id: passkey.credential_id,
-        publicKey: Buffer.from(passkey.public_key, 'base64'),
-        counter: passkey.counter,
+        publicKey: new Uint8Array(publicKeyBuffer),
+        counter: passkey.counter ?? 0,
         transports: passkey.transports ? JSON.parse(passkey.transports) : undefined,
       },
       requireUserVerification: true,
     };
  
+    console.log('calling verifyAuthenticationResponse...');
     const verification = await verifyAuthenticationResponse(verifyOpts);
+    console.log('verification result:', verification.verified);
  
     if (!verification.verified) {
       return NextResponse.json({ error: 'Passkey verification failed' }, { status: 401 });
     }
  
-    // authenticationInfo may be undefined in some simplewebauthn v10 edge runtime builds
-    // safely increment counter without reading from it
     const newCounter = (passkey.counter ?? 0) + 1;
- 
     await updatePasskeyCounter(passkey.credential_id, newCounter);
     await logAuditEvent(user.id, 'passkey_login', null, null);
  
@@ -86,8 +97,8 @@ export async function POST(request: NextRequest) {
  
     response.headers.set('Set-Cookie', createSessionCookie(jwtToken));
     return response;
-  } catch (error) {
-    console.error('Passkey auth verify error:', error);
+  } catch (error: any) {
+    console.error('Passkey auth verify error:', error?.message, error?.stack);
     return NextResponse.json({ error: 'Authentication failed' }, { status: 500 });
   }
 }
