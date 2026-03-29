@@ -162,7 +162,7 @@ export async function storeChallenge(data: {
   const db = getDB();
   // Clean up expired challenges first
   await db.prepare(
-    "DELETE FROM webauthn_challenges WHERE user_id = ? AND type = ? OR expires_at < datetime('now')"
+    "DELETE FROM webauthn_challenges WHERE (user_id = ? AND type = ?) OR expires_at < datetime('now')"
   ).bind(data.userId, data.type).run();
   await db.prepare(
     'INSERT INTO webauthn_challenges (id, user_id, challenge, type, expires_at) VALUES (?, ?, ?, ?, ?)'
