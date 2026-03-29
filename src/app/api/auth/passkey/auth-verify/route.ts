@@ -38,8 +38,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Passkey not found' }, { status: 404 });
     }
  
-    // Cast opts to any — @simplewebauthn/server@10 uses 'credential' at runtime
-    // but TypeScript types still reference 'authenticator' from v9
     const verifyOpts: any = {
       response: body,
       expectedChallenge,
@@ -60,8 +58,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Passkey verification failed' }, { status: 401 });
     }
  
-    const authInfo = verification.authenticationInfo as any;
-    const newCounter = authInfo?.newCounter ?? authInfo?.counter ?? passkey.counter;
+    // Safely extract counter — handle all possible property names across v9/v10
+    let newCounter = passkey.counter;
+    try {
+      const info = verification.authenticationInfo as any;
+      if (info !== undefined && info !== null) {
+        newCounter = info.newCounter ?? info.counter ?? info.credentialCounter ?? passkey.counter;
+      }
+    } catch {
+      // keep existing counter if extraction fails
+    }
  
     await updatePasskeyCounter(passkey.credential_id, newCounter);
     await logAuditEvent(user.id, 'passkey_login', null, null);
@@ -92,4 +98,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Authentication failed' }, { status: 500 });
   }
 }
- 
