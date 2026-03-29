@@ -62,14 +62,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Passkey verification failed' }, { status: 400 });
     }
 
-    const { credential, credentialDeviceType, credentialBackedUp } = verification.registrationInfo;
+    // Cast to any to work around stale TypeScript types in @simplewebauthn/server@10
+    const info = verification.registrationInfo as any;
+
+    // v10 uses registrationInfo.credential.{id,publicKey,counter}
+    const credentialId = info.credential?.id ?? info.credentialID;
+    const credentialPublicKey = info.credential?.publicKey ?? info.credentialPublicKey;
+    const credentialCounter = info.credential?.counter ?? info.counter ?? 0;
+    const credentialDeviceType = info.credentialDeviceType ?? info.credential?.deviceType ?? null;
+    const credentialBackedUp = info.credentialBackedUp ?? info.credential?.backedUp ?? false;
 
     await createPasskey({
       id: crypto.randomUUID(),
       userId: user.id,
-      credentialId: credential.id,
-      publicKey: Buffer.from(credential.publicKey).toString('base64'),
-      counter: credential.counter,
+      credentialId,
+      publicKey: Buffer.from(credentialPublicKey).toString('base64'),
+      counter: credentialCounter,
       deviceType: credentialDeviceType,
       backedUp: credentialBackedUp,
       transports: transports.length > 0 ? JSON.stringify(transports) : null,

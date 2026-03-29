@@ -1,67 +1,91 @@
 export const runtime = 'edge';
 
-import { verifyToken, getTokenFromCookies } from '@/lib/auth';
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyAuthenticationResponse } from '@simplewebauthn/server';
+import {
+  findUserById,
+  getPasskeyByCredentialId,
+  getAndDeleteChallenge,
+  updatePasskeyCounter,
+  logAuditEvent,
+} from '@/lib/db';
+import { createToken, createSessionCookie } from '@/lib/auth';
 
-const HA_WORKER = 'https://super-rain-384e.mattwillson.workers.dev';
+const RP_ID = 'thewillsons.com';
+const ORIGIN = 'https://thewillsons.com';
 
-async function authenticate(request: Request): Promise<boolean> {
-  const cookieHeader = request.headers.get('Cookie');
-  const token = getTokenFromCookies(cookieHeader);
-  if (!token) return false;
-  const user = await verifyToken(token);
-  return !!user;
-}
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { userId } = body;
 
-export async function GET(
-  request: Request,
-  { params }: { params: { path: string[] } }
-) {
-  if (!await authenticate(request)) {
-    return new Response('Unauthorized', { status: 401 });
+    if (!userId) {
+      return NextResponse.json({ error: 'User ID required' }, { status: 400 });
+    }
+
+    const user = await findUserById(userId);
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    const expectedChallenge = await getAndDeleteChallenge(userId, 'authentication');
+    if (!expectedChallenge) {
+      return NextResponse.json({ error: 'Challenge expired or not found' }, { status: 400 });
+    }
+
+    const passkey = await getPasskeyByCredentialId(body.id);
+    if (!passkey || passkey.user_id !== userId) {
+      return NextResponse.json({ error: 'Passkey not found' }, { status: 404 });
+    }
+
+    const verification = await verifyAuthenticationResponse({
+      response: body,
+      expectedChallenge,
+      expectedOrigin: ORIGIN,
+      expectedRPID: RP_ID,
+      // Cast to any to work around stale TypeScript types in @simplewebauthn/server@10
+      credential: {
+        id: passkey.credential_id,
+        publicKey: Buffer.from(passkey.public_key, 'base64'),
+        counter: passkey.counter,
+        transports: passkey.transports ? JSON.parse(passkey.transports) : undefined,
+      } as any,
+      requireUserVerification: true,
+    });
+
+    if (!verification.verified) {
+      return NextResponse.json({ error: 'Passkey verification failed' }, { status: 401 });
+    }
+
+    const authInfo = verification.authenticationInfo as any;
+    const newCounter = authInfo.newCounter ?? authInfo.counter ?? passkey.counter;
+
+    await updatePasskeyCounter(passkey.credential_id, newCounter);
+    await logAuditEvent(user.id, 'passkey_login', null, null);
+
+    const jwtToken = await createToken({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      avatar: user.avatar,
+    });
+
+    const response = NextResponse.json({
+      success: true,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        avatar: user.avatar,
+      },
+    });
+
+    response.headers.set('Set-Cookie', createSessionCookie(jwtToken));
+    return response;
+  } catch (error) {
+    console.error('Passkey auth verify error:', error);
+    return NextResponse.json({ error: 'Authentication failed' }, { status: 500 });
   }
-
-  const path = params.path.join('/');
-  const url = new URL(request.url);
-  const haUrl = `${HA_WORKER}/api/ha/${path}${url.search}`;
-
-  const response = await fetch(haUrl, {
-    headers: {
-      'Content-Type': 'application/json',
-      'Cookie': request.headers.get('Cookie') || '',
-      'Origin': 'https://thewillsons.com',
-    },
-  });
-
-  return new Response(response.body, {
-    status: response.status,
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
-
-export async function POST(
-  request: Request,
-  { params }: { params: { path: string[] } }
-) {
-  if (!await authenticate(request)) {
-    return new Response('Unauthorized', { status: 401 });
-  }
-
-  const path = params.path.join('/');
-  const haUrl = `${HA_WORKER}/api/ha/${path}`;
-  const body = await request.text();
-
-  const response = await fetch(haUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Cookie': request.headers.get('Cookie') || '',
-      'Origin': 'https://thewillsons.com',
-    },
-    body,
-  });
-
-  return new Response(response.body, {
-    status: response.status,
-    headers: { 'Content-Type': 'application/json' },
-  });
 }
