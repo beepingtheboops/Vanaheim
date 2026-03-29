@@ -15,7 +15,9 @@
     "react-dom": "^18.3.0",
     "bcryptjs": "^2.4.3",
     "jose": "^5.2.0",
-    "lucide-react": "^0.383.0"
+    "lucide-react": "^0.383.0",
+    "@simplewebauthn/server": "^10.0.0",
+    "@simplewebauthn/browser": "^10.0.0"
   },
   "devDependencies": {
     "@cloudflare/next-on-pages": "^1.13.0",

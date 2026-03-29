@@ -2,7 +2,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { useRouter } from 'next/navigation';
-import { Eye, EyeOff, ChevronRight, Plus } from 'lucide-react';
+import { Eye, EyeOff, ChevronRight, Plus, Fingerprint } from 'lucide-react';
+import {
+  startAuthentication,
+} from '@simplewebauthn/browser';
 
 const TURNSTILE_SITE_KEY = '0x4AAAAAACr241t07alup8tw';
 
@@ -12,6 +15,8 @@ const FAMILY_QUICK_LOGIN = [
   { name: 'Abbat', email: 'abbat@thewillsons.com', icon: 'abbat' },
   { name: 'Odin', email: 'odin@thewillsons.com', icon: 'odin' },
 ];
+
+const PASSKEY_EMAILS = ['matt@thewillsons.com', 'noonie@thewillsons.com', 'odin@thewillsons.com', 'abbat@thewillsons.com'];
 
 function DadIcon({ active }: { active: boolean }) {
   const c = active ? '#c9a84c' : '#6b7280';
@@ -149,8 +154,10 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
   const [selectedMember, setSelectedMember] = useState<string | null>(null);
   const [turnstileToken, setTurnstileToken] = useState('');
+  const [showPasswordForm, setShowPasswordForm] = useState(false);
   const turnstileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -166,11 +173,79 @@ export default function LoginPage() {
     }
   }, []);
 
-  const handleQuickSelect = (member: (typeof FAMILY_QUICK_LOGIN)[0]) => {
+  const handleQuickSelect = async (member: (typeof FAMILY_QUICK_LOGIN)[0]) => {
     setSelectedMember(member.name);
     setEmail(member.email);
     setPassword('');
     setError('');
+    setShowPasswordForm(false);
+
+    // If approved for passkey, try biometric auth immediately
+    if (PASSKEY_EMAILS.includes(member.email)) {
+      await attemptPasskeyAuth(member.email);
+    } else {
+      setShowPasswordForm(true);
+    }
+  };
+
+  const attemptPasskeyAuth = async (memberEmail: string) => {
+    setPasskeyLoading(true);
+    setError('');
+    try {
+      // Get authentication options
+      const optionsRes = await fetch('/api/auth/passkey/auth-options', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: memberEmail }),
+      });
+
+      if (!optionsRes.ok) {
+        // No passkey registered — fall back to password
+        setShowPasswordForm(true);
+        setPasskeyLoading(false);
+        return;
+      }
+
+      const options = await optionsRes.json();
+
+      if (!options.allowCredentials?.length) {
+        setShowPasswordForm(true);
+        setPasskeyLoading(false);
+        return;
+      }
+
+      // Trigger Face ID / Touch ID / PIN
+      const assertion = await startAuthentication({ optionsJSON: options });
+
+      // Verify with server
+      const verifyRes = await fetch('/api/auth/passkey/auth-verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...assertion, userId: options.userId }),
+      });
+
+      const verifyData = await verifyRes.json();
+
+      if (verifyData.success) {
+        // Update auth context
+        const meRes = await fetch('/api/auth/me');
+        if (meRes.ok) {
+          router.push('/dashboard');
+        }
+      } else {
+        setError(verifyData.error || 'Passkey authentication failed');
+        setShowPasswordForm(true);
+      }
+    } catch (err: any) {
+      if (err?.name === 'NotAllowedError') {
+        // User cancelled biometric — fall back to password
+        setShowPasswordForm(true);
+      } else {
+        setShowPasswordForm(true);
+      }
+    } finally {
+      setPasskeyLoading(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -202,42 +277,24 @@ export default function LoginPage() {
         background: 'radial-gradient(ellipse at 50% 30%, rgba(20,16,8,1) 0%, rgba(10,12,16,1) 60%, #000 100%)'
       }} />
 
-      {/* Yggdrasil image — gold tinted, faded */}
-      <div
-        className="fixed inset-0 flex items-center justify-center pointer-events-none"
-        style={{ opacity: 0.1 }}
-      >
-        <img
-          src="/yggdrasil.png"
-          alt=""
-          style={{
-            width: '70vmin',
-            height: '70vmin',
-            objectFit: 'contain',
-            filter: 'invert(1) sepia(1) saturate(4) hue-rotate(5deg) brightness(0.85)',
-          }}
-        />
+      {/* Yggdrasil image */}
+      <div className="fixed inset-0 flex items-center justify-center pointer-events-none" style={{ opacity: 0.1 }}>
+        <img src="/yggdrasil.png" alt="" style={{
+          width: '70vmin', height: '70vmin', objectFit: 'contain',
+          filter: 'invert(1) sepia(1) saturate(4) hue-rotate(5deg) brightness(0.85)',
+        }} />
       </div>
 
-      {/* Vignette */}
       <div className="fixed inset-0 pointer-events-none" style={{
         background: 'radial-gradient(ellipse at center, transparent 20%, rgba(0,0,0,0.8) 100%)'
       }} />
 
-      <div className="fixed pointer-events-none" style={{
-        top: '30%', left: '50%', transform: 'translate(-50%, -50%)',
-        width: 500, height: 500,
-        background: 'radial-gradient(circle, rgba(201,168,76,0.04) 0%, transparent 70%)'
-      }} />
-
       <RuneParticles />
 
-      {/* Add to Home Screen — top right */}
+      {/* Add to Home Screen */}
       <div className="fixed top-4 right-4 z-50">
         <button
-          onClick={() => {
-            alert('To install: tap the Share button (iOS) or menu (Android) and select "Add to Home Screen"');
-          }}
+          onClick={() => alert('To install: tap the Share button (iOS) or menu (Android) and select "Add to Home Screen"')}
           className="flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-300"
           style={{
             background: 'rgba(12, 14, 20, 0.85)',
@@ -255,18 +312,13 @@ export default function LoginPage() {
         </button>
       </div>
 
-      {/* Cancel — top left */}
+      {/* Cancel */}
       <div className="fixed top-4 left-4 z-50">
         <button
           onClick={() => router.push('/')}
           style={{
-            color: 'rgba(201,168,76,0.35)',
-            fontFamily: "'Cinzel', serif",
-            fontSize: 11,
-            letterSpacing: 2,
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
+            color: 'rgba(201,168,76,0.35)', fontFamily: "'Cinzel', serif",
+            fontSize: 11, letterSpacing: 2, background: 'none', border: 'none', cursor: 'pointer',
           }}
         >
           cancel
@@ -277,35 +329,9 @@ export default function LoginPage() {
         {/* Header */}
         <div className="text-center mb-8" style={{ animation: 'fadeInDown 1s ease forwards' }}>
           <VegvisirSymbol />
-
-          <p style={{
-            fontFamily: "'Cinzel', serif",
-            fontSize: 13,
-            letterSpacing: 6,
-            color: 'rgba(201,168,76,0.5)',
-            marginBottom: 6,
-            textTransform: 'uppercase',
-          }}>Welcome to</p>
-
-          <h1 style={{
-            fontFamily: "'Cinzel', serif",
-            fontSize: 'clamp(32px, 7vw, 48px)',
-            fontWeight: 700,
-            letterSpacing: '6px',
-            color: '#c9a84c',
-            textShadow: '0 0 40px rgba(201,168,76,0.25)',
-            lineHeight: 1,
-            marginBottom: 8,
-          }}>VANAHEIM</h1>
-
-          <p style={{
-            fontFamily: "'Cinzel', serif",
-            fontSize: 16,
-            letterSpacing: 3,
-            color: 'rgba(201,168,76,0.55)',
-            marginBottom: 6,
-          }}>Willson Family Command Center</p>
-
+          <p style={{ fontFamily: "'Cinzel', serif", fontSize: 13, letterSpacing: 6, color: 'rgba(201,168,76,0.5)', marginBottom: 6, textTransform: 'uppercase' }}>Welcome to</p>
+          <h1 style={{ fontFamily: "'Cinzel', serif", fontSize: 'clamp(32px, 7vw, 48px)', fontWeight: 700, letterSpacing: '6px', color: '#c9a84c', textShadow: '0 0 40px rgba(201,168,76,0.25)', lineHeight: 1, marginBottom: 8 }}>VANAHEIM</h1>
+          <p style={{ fontFamily: "'Cinzel', serif", fontSize: 16, letterSpacing: 3, color: 'rgba(201,168,76,0.55)', marginBottom: 6 }}>Willson Family Command Center</p>
           <div className="flex items-center justify-center gap-3 mt-3">
             <div className="h-px flex-1 max-w-20" style={{ background: 'linear-gradient(90deg, transparent, rgba(201,168,76,0.4))' }} />
             <span style={{ fontSize: 16, letterSpacing: 8, color: 'rgba(201,168,76,0.45)', fontFamily: "'Cinzel', serif" }}>ᚺ ᛟ ᛗ ᛖ</span>
@@ -324,22 +350,23 @@ export default function LoginPage() {
           opacity: 0,
           animationFillMode: 'forwards',
         }}>
+
           {/* Sigil selector */}
           <div className="mb-7">
-            <p style={{
-              fontSize: 10, letterSpacing: 4, textTransform: 'uppercase',
-              color: 'rgba(201,168,76,0.6)', textAlign: 'center', marginBottom: 14,
-              fontFamily: "'Cinzel', serif",
-            }}>Choose your sigil</p>
+            <p style={{ fontSize: 10, letterSpacing: 4, textTransform: 'uppercase', color: 'rgba(201,168,76,0.6)', textAlign: 'center', marginBottom: 14, fontFamily: "'Cinzel', serif" }}>
+              Choose your sigil
+            </p>
             <div className="grid grid-cols-4 gap-3">
               {FAMILY_QUICK_LOGIN.map((member) => {
                 const IconComponent = iconMap[member.icon];
                 const isActive = selectedMember === member.name;
+                const isApproved = PASSKEY_EMAILS.includes(member.email);
                 return (
                   <button
                     key={member.name}
                     onClick={() => handleQuickSelect(member)}
-                    className="flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl transition-all duration-300"
+                    disabled={passkeyLoading}
+                    className="flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl transition-all duration-300 relative"
                     style={{
                       background: isActive ? 'rgba(201, 168, 76, 0.08)' : 'rgba(20, 22, 30, 0.6)',
                       border: isActive ? '1px solid rgba(201, 168, 76, 0.35)' : '1px solid rgba(107, 114, 128, 0.08)',
@@ -347,127 +374,92 @@ export default function LoginPage() {
                     }}
                   >
                     <IconComponent active={isActive} />
-                    <span style={{
-                      fontSize: 12, fontWeight: 600, letterSpacing: 1,
-                      color: isActive ? '#c9a84c' : '#d1c7b7',
-                      fontFamily: "'Cinzel', serif",
-                    }}>{member.name}</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: 1, color: isActive ? '#c9a84c' : '#d1c7b7', fontFamily: "'Cinzel', serif" }}>
+                      {member.name}
+                    </span>
+                    {/* Fingerprint indicator for passkey users */}
+                    {isApproved && (
+                      <div className="absolute top-1 right-1" title="Face ID / Touch ID">
+                        <Fingerprint size={10} style={{ color: isActive ? '#c9a84c' : 'rgba(201,168,76,0.3)' }} />
+                      </div>
+                    )}
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {/* Divider */}
-          <div className="flex items-center gap-3 mb-6">
-            <div className="flex-1 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(201,168,76,0.2), transparent)' }} />
-            <div className="flex gap-2">
-              <span style={{ color: 'rgba(201,168,76,0.25)', fontSize: 12 }}>◆</span>
-              <span style={{ color: 'rgba(201,168,76,0.15)', fontSize: 8, lineHeight: '12px' }}>●</span>
-              <span style={{ color: 'rgba(201,168,76,0.25)', fontSize: 12 }}>◆</span>
+          {/* Passkey loading state */}
+          {passkeyLoading && (
+            <div className="flex flex-col items-center gap-3 py-6">
+              <Fingerprint size={32} style={{ color: '#c9a84c' }} className="animate-pulse" />
+              <p style={{ fontFamily: "'Cinzel', serif", fontSize: 12, letterSpacing: 3, color: 'rgba(201,168,76,0.6)' }}>
+                Waiting for biometric...
+              </p>
             </div>
-            <div className="flex-1 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(201,168,76,0.2), transparent)' }} />
-          </div>
+          )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Email */}
-            <div>
-              <label style={{
-                display: 'block', fontSize: 10, letterSpacing: 3,
-                color: 'rgba(201,168,76,0.55)', marginBottom: 8,
-                textTransform: 'uppercase', fontFamily: "'Cinzel', serif",
-              }}>Email</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@thewillsons.com"
-                required
-                autoComplete="email"
-              />
-            </div>
-
-            {/* Password */}
-            <div>
-              <label style={{
-                display: 'block', fontSize: 10, letterSpacing: 3,
-                color: 'rgba(201,168,76,0.55)', marginBottom: 8,
-                textTransform: 'uppercase', fontFamily: "'Cinzel', serif",
-              }}>Password</label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
-                  required
-                  autoComplete="current-password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 transition-colors"
-                  style={{ color: 'rgba(138,109,43,0.4)' }}
-                >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-            </div>
-
-            {/* Turnstile */}
-            <div className="flex justify-center">
-              <div style={{ display: turnstileToken ? 'none' : 'block' }}>
-                <div
-                  ref={turnstileRef}
-                  className="cf-turnstile"
-                  data-sitekey={TURNSTILE_SITE_KEY}
-                  data-theme="dark"
-                  data-callback="onTurnstileSuccess"
-                />
-              </div>
-              {turnstileToken && (
-                <div className="flex items-center gap-2 text-xs py-2" style={{
-                  color: 'rgba(34,197,94,0.7)',
-                  fontFamily: "'Cinzel', serif",
-                  letterSpacing: 2,
-                }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <polyline points="20 6 9 17 4 12"/>
-                  </svg>
-                  Verified
+          {/* Password form — shown after passkey fails/cancelled or for non-passkey users */}
+          {!passkeyLoading && showPasswordForm && (
+            <>
+              <div className="flex items-center gap-3 mb-6">
+                <div className="flex-1 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(201,168,76,0.2), transparent)' }} />
+                <div className="flex gap-2">
+                  <span style={{ color: 'rgba(201,168,76,0.25)', fontSize: 12 }}>◆</span>
+                  <span style={{ color: 'rgba(201,168,76,0.15)', fontSize: 8, lineHeight: '12px' }}>●</span>
+                  <span style={{ color: 'rgba(201,168,76,0.25)', fontSize: 12 }}>◆</span>
                 </div>
-              )}
-            </div>
+                <div className="flex-1 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(201,168,76,0.2), transparent)' }} />
+              </div>
 
-            {/* Error */}
-            {error && (
-              <div style={{
-                fontSize: 13, textAlign: 'center', padding: '10px 16px',
-                borderRadius: 10, background: 'rgba(139, 37, 0, 0.12)',
-                color: '#f87171', border: '1px solid rgba(139, 37, 0, 0.25)',
-              }}>{error}</div>
-            )}
+              <form onSubmit={handleSubmit} className="space-y-5">
+                <div>
+                  <label style={{ display: 'block', fontSize: 10, letterSpacing: 3, color: 'rgba(201,168,76,0.55)', marginBottom: 8, textTransform: 'uppercase', fontFamily: "'Cinzel', serif" }}>Email</label>
+                  <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@thewillsons.com" required autoComplete="email" />
+                </div>
 
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={isLoading || !email || !password}
-              className="w-full py-4 rounded-xl font-semibold text-sm uppercase transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"
-              style={{
-                background: 'linear-gradient(135deg, #8a6d2b 0%, #c9a84c 50%, #8a6d2b 100%)',
-                color: '#0a0c10',
-                boxShadow: '0 4px 24px rgba(201, 168, 76, 0.15), inset 0 1px 0 rgba(232,212,139,0.3)',
-                fontFamily: "'Cinzel', serif",
-                letterSpacing: 4,
-              }}
-            >
-              {isLoading ? (
-                <div className="w-5 h-5 border-2 border-void/30 border-t-void rounded-full animate-spin" />
-              ) : (
-                <>Enter the Realm<ChevronRight size={16} /></>
-              )}
-            </button>
-          </form>
+                <div>
+                  <label style={{ display: 'block', fontSize: 10, letterSpacing: 3, color: 'rgba(201,168,76,0.55)', marginBottom: 8, textTransform: 'uppercase', fontFamily: "'Cinzel', serif" }}>Password</label>
+                  <div className="relative">
+                    <input type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter your password" required autoComplete="current-password" />
+                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 transition-colors" style={{ color: 'rgba(138,109,43,0.4)' }}>
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Turnstile */}
+                <div className="flex justify-center">
+                  <div style={{ display: turnstileToken ? 'none' : 'block' }}>
+                    <div ref={turnstileRef} className="cf-turnstile" data-sitekey={TURNSTILE_SITE_KEY} data-theme="dark" data-callback="onTurnstileSuccess" />
+                  </div>
+                  {turnstileToken && (
+                    <div className="flex items-center gap-2 text-xs py-2" style={{ color: 'rgba(34,197,94,0.7)', fontFamily: "'Cinzel', serif", letterSpacing: 2 }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                      Verified
+                    </div>
+                  )}
+                </div>
+
+                {error && (
+                  <div style={{ fontSize: 13, textAlign: 'center', padding: '10px 16px', borderRadius: 10, background: 'rgba(139, 37, 0, 0.12)', color: '#f87171', border: '1px solid rgba(139, 37, 0, 0.25)' }}>
+                    {error}
+                  </div>
+                )}
+
+                <button type="submit" disabled={isLoading || !email || !password} className="w-full py-4 rounded-xl font-semibold text-sm uppercase transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed" style={{ background: 'linear-gradient(135deg, #8a6d2b 0%, #c9a84c 50%, #8a6d2b 100%)', color: '#0a0c10', boxShadow: '0 4px 24px rgba(201, 168, 76, 0.15), inset 0 1px 0 rgba(232,212,139,0.3)', fontFamily: "'Cinzel', serif", letterSpacing: 4 }}>
+                  {isLoading ? <div className="w-5 h-5 border-2 border-void/30 border-t-void rounded-full animate-spin" /> : <>Enter the Realm<ChevronRight size={16} /></>}
+                </button>
+              </form>
+            </>
+          )}
+
+          {/* Initial state — prompt to select sigil */}
+          {!passkeyLoading && !showPasswordForm && !selectedMember && (
+            <p style={{ textAlign: 'center', fontSize: 11, letterSpacing: 2, color: 'rgba(201,168,76,0.3)', fontFamily: "'Cinzel', serif" }}>
+              Select your sigil above to enter
+            </p>
+          )}
         </div>
 
         <div className="text-center mt-8" style={{ fontSize: 14, letterSpacing: 8, color: 'rgba(201,168,76,0.12)' }}>
