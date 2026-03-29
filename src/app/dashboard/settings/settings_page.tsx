@@ -62,7 +62,7 @@ export default function SettingsPage() {
       const options = await optionsRes.json();
 
       // Trigger biometric registration
-      const registration = await startRegistration({ optionsJSON: options });
+      const registration = await startRegistration(options);
 
       // Verify with server
       const verifyRes = await fetch('/api/auth/passkey/register-verify', {

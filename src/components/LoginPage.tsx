@@ -239,7 +239,7 @@ export default function LoginPage() {
       }
 
       // Trigger Face ID / Touch ID / PIN
-      const assertion = await startAuthentication({ optionsJSON: options });
+      const assertion = await startAuthentication(options);
 
       // Verify with server
       const verifyRes = await fetch('/api/auth/passkey/auth-verify', {
