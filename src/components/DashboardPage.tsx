@@ -6,15 +6,13 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   Shield, LogOut, Camera, Lock, Wifi, Thermometer,
   Droplets, Bot, Sun, Calendar, Bell, Settings,
-  RefreshCw, Battery, AlertTriangle, Home, Unlock,
+  RefreshCw, Battery, Home, Unlock,
   MapPin, Sunrise, Sunset, Printer, ShoppingCart,
-  Cloud, Wind, Droplet, Eye,
+  Cloud, Wind, Droplet,
 } from 'lucide-react';
 
-// ─── Config ──────────────────────────────────────────────────────────────────
 const REFRESH_INTERVAL = 30_000;
 
-// ─── Entity IDs ──────────────────────────────────────────────────────────────
 const ENTITIES = {
   locks: ['lock.front_door'],
   lockBattery: 'sensor.front_door_battery',
@@ -34,7 +32,6 @@ const ENTITIES = {
   printerYellow: 'sensor.hp_color_laserjet_pro_m252dw_yellow_cartridge_hp_cf402a',
 };
 
-// ─── Types ───────────────────────────────────────────────────────────────────
 interface HaState {
   entity_id: string;
   state: string;
@@ -48,20 +45,18 @@ interface TodoItem {
   status: string;
 }
 
-// ─── Nav ─────────────────────────────────────────────────────────────────────
 const NAV_ITEMS = [
-  { label: 'Overview', icon: Home },
-  { label: 'Security', icon: Shield },
-  { label: 'Cameras', icon: Camera },
-  { label: 'Devices', icon: Bot },
-  { label: 'Climate', icon: Thermometer },
-  { label: 'Sprinklers', icon: Droplets },
-  { label: 'Lights', icon: Sun },
-  { label: 'Calendar', icon: Calendar },
-  { label: 'Settings', icon: Settings },
+  { label: 'Overview', icon: Home, href: null },
+  { label: 'Security', icon: Shield, href: null },
+  { label: 'Cameras', icon: Camera, href: null },
+  { label: 'Devices', icon: Bot, href: null },
+  { label: 'Climate', icon: Thermometer, href: null },
+  { label: 'Sprinklers', icon: Droplets, href: null },
+  { label: 'Lights', icon: Sun, href: null },
+  { label: 'Calendar', icon: Calendar, href: null },
+  { label: 'Settings', icon: Settings, href: '/dashboard/settings' },
 ];
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 function formatTime(isoString: string): string {
   const date = new Date(isoString);
   const now = new Date();
@@ -89,7 +84,6 @@ function inkColor(level: number): string {
   return '#22c55e';
 }
 
-// ─── Card wrapper ─────────────────────────────────────────────────────────────
 function Card({ children, className = '', delay = 0 }: {
   children: React.ReactNode;
   className?: string;
@@ -132,7 +126,6 @@ function SkeletonCard({ delay = 0 }: { delay?: number }) {
   );
 }
 
-// ─── Component ───────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const { user, loading, logout } = useAuth();
   const router = useRouter();
@@ -168,8 +161,6 @@ export default function DashboardPage() {
 
   const fetchTodos = useCallback(async () => {
     try {
-      const res = await fetch('/api/ha/services');
-      // Fetch todo items via HA API
       const res2 = await fetch('/api/ha/states/todo.shopping_list');
       if (res2.ok) {
         const data = await res2.json();
@@ -205,12 +196,19 @@ export default function DashboardPage() {
     const lock = states[ENTITIES.locks[0]];
     if (!lock || lockLoading) return;
     setLockLoading(true);
+    setStates(prev => ({
+      ...prev,
+      [ENTITIES.locks[0]]: {
+        ...prev[ENTITIES.locks[0]],
+        state: lock.state === 'locked' ? 'unlocked' : 'locked',
+      }
+    }));
     try {
       const service = lock.state === 'locked' ? 'unlock' : 'lock';
       await callService('lock', service, { entity_id: ENTITIES.locks[0] });
-      setTimeout(fetchStates, 1000);
+      setTimeout(fetchStates, 2000);
     } catch {
-      // silently fail
+      setStates(prev => ({ ...prev, [ENTITIES.locks[0]]: lock }));
     } finally {
       setLockLoading(false);
     }
@@ -241,7 +239,6 @@ export default function DashboardPage() {
 
   if (!user) return null;
 
-  // ── Derived state ─────────────────────────────────────────────────────────
   const lock = states[ENTITIES.locks[0]];
   const battery = states[ENTITIES.lockBattery];
   const operator = states[ENTITIES.lockOperator];
@@ -284,7 +281,7 @@ export default function DashboardPage() {
   return (
     <div className="grain-overlay min-h-screen bg-void">
 
-      {/* ── Top bar ────────────────────────────────────────────────────────── */}
+      {/* Top bar */}
       <header
         className="sticky top-0 z-50 flex items-center justify-between px-6 py-4"
         style={{
@@ -337,7 +334,7 @@ export default function DashboardPage() {
 
       <div className="flex">
 
-        {/* ── Sidebar ────────────────────────────────────────────────────────── */}
+        {/* Sidebar */}
         <nav
           className="w-64 min-h-[calc(100vh-65px)] p-4 hidden lg:block sticky top-[65px] self-start"
           style={{
@@ -351,7 +348,13 @@ export default function DashboardPage() {
               return (
                 <button
                   key={item.label}
-                  onClick={() => setActiveNav(item.label)}
+                  onClick={() => {
+                    if (item.href) {
+                      router.push(item.href);
+                    } else {
+                      setActiveNav(item.label);
+                    }
+                  }}
                   className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200"
                   style={{
                     background: active ? 'rgba(201, 168, 76, 0.08)' : 'transparent',
@@ -367,10 +370,9 @@ export default function DashboardPage() {
           </div>
         </nav>
 
-        {/* ── Main content ───────────────────────────────────────────────────── */}
+        {/* Main content */}
         <main className="flex-1 p-6 lg:p-8 max-w-6xl">
 
-          {/* Greeting */}
           <div className="mb-6 animate-fade-in">
             <h2 className="text-2xl font-display tracking-wide text-bone mb-1">
               Welcome home, {user.name}
@@ -382,15 +384,13 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          {/* ── Row 1: Security + Presence + Network ───────────────────────── */}
+          {/* Row 1: Front Door + Presence + Network */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
 
-            {/* Front Door / Security */}
             {haLoading ? <SkeletonCard delay={0} /> : (
               <Card delay={0}>
                 <CardTitle>Front Door</CardTitle>
                 <div className="space-y-3">
-                  {/* Lock status + toggle */}
                   <div
                     className="flex items-center justify-between p-4 rounded-xl"
                     style={{
@@ -428,7 +428,6 @@ export default function DashboardPage() {
                     )}
                   </div>
 
-                  {/* Battery */}
                   {batteryLevel !== null && (
                     <div className="flex items-center justify-between px-1">
                       <div className="flex items-center gap-2">
@@ -439,10 +438,7 @@ export default function DashboardPage() {
                         <div className="flex-1 h-1 rounded-full" style={{ background: 'rgba(30,34,45,0.8)' }}>
                           <div
                             className="h-1 rounded-full transition-all"
-                            style={{
-                              width: `${batteryLevel}%`,
-                              background: inkColor(batteryLevel),
-                            }}
+                            style={{ width: `${batteryLevel}%`, background: inkColor(batteryLevel) }}
                           />
                         </div>
                       </div>
@@ -452,7 +448,6 @@ export default function DashboardPage() {
                     </div>
                   )}
 
-                  {/* Last changed */}
                   {lock && (
                     <p className="text-xs text-bone/25 text-right">
                       {formatTime(lock.last_changed)}
@@ -462,12 +457,10 @@ export default function DashboardPage() {
               </Card>
             )}
 
-            {/* Presence */}
             {haLoading ? <SkeletonCard delay={0.08} /> : (
               <Card delay={0.08}>
                 <CardTitle>Presence</CardTitle>
                 <div className="space-y-3">
-                  {/* Matt */}
                   <div className="flex items-center justify-between p-3 rounded-xl"
                     style={{ background: 'rgba(30,34,45,0.4)' }}>
                     <div className="flex items-center gap-3">
@@ -479,20 +472,14 @@ export default function DashboardPage() {
                         </p>
                       </div>
                     </div>
-                    <div
-                      className="w-2 h-2 rounded-full"
-                      style={{ background: isHome ? '#22c55e' : '#64748b' }}
-                    />
+                    <div className="w-2 h-2 rounded-full" style={{ background: isHome ? '#22c55e' : '#64748b' }} />
                   </div>
-
-                  {/* Home zone info */}
                   <div className="flex items-center gap-2 px-1">
                     <MapPin size={14} className="text-bone/30" />
                     <span className="text-xs text-bone/30">
                       {isHome ? 'At home' : 'Away from home'}
                     </span>
                   </div>
-
                   <p className="text-xs text-bone/20 px-1">
                     Add family members in HA to track everyone
                   </p>
@@ -500,7 +487,6 @@ export default function DashboardPage() {
               </Card>
             )}
 
-            {/* Network */}
             {haLoading ? <SkeletonCard delay={0.16} /> : (
               <Card delay={0.16}>
                 <CardTitle>Network</CardTitle>
@@ -516,19 +502,14 @@ export default function DashboardPage() {
                         </p>
                       </div>
                     </div>
-                    <div
-                      className="w-2 h-2 rounded-full"
-                      style={{ background: isOnline ? '#22c55e' : '#ef4444' }}
-                    />
+                    <div className="w-2 h-2 rounded-full" style={{ background: isOnline ? '#22c55e' : '#ef4444' }} />
                   </div>
-
                   {externalIp && (
                     <div className="flex items-center justify-between px-1">
                       <span className="text-xs text-bone/40">External IP</span>
                       <span className="text-xs font-mono text-bone/50">{externalIp.state}</span>
                     </div>
                   )}
-
                   <div className="flex items-center justify-between px-1">
                     <span className="text-xs text-bone/40">Provider</span>
                     <span className="text-xs text-bone/50">Eero</span>
@@ -538,15 +519,13 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* ── Row 2: Weather + Sun ───────────────────────────────────────── */}
+          {/* Row 2: Weather + Daylight */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
 
-            {/* Weather */}
             {haLoading ? <SkeletonCard delay={0.24} /> : (
               <Card delay={0.24}>
                 <CardTitle>Weather</CardTitle>
                 <div className="space-y-4">
-                  {/* Current conditions */}
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-4xl font-bold font-mono text-bone">
@@ -575,8 +554,6 @@ export default function DashboardPage() {
                       )}
                     </div>
                   </div>
-
-                  {/* Forecast */}
                   {weatherForecast && weatherForecast.length > 0 && (
                     <div className="grid grid-cols-4 gap-2 pt-3 border-t border-gold/5">
                       {weatherForecast.slice(0, 4).map((day, i) => (
@@ -597,7 +574,6 @@ export default function DashboardPage() {
               </Card>
             )}
 
-            {/* Sun */}
             {haLoading ? <SkeletonCard delay={0.32} /> : (
               <Card delay={0.32}>
                 <CardTitle>Daylight</CardTitle>
@@ -615,7 +591,6 @@ export default function DashboardPage() {
                     </div>
                     <p className="text-xs text-bone/30">Huntington Beach, CA</p>
                   </div>
-
                   <div className="grid grid-cols-2 gap-3">
                     <div className="p-3 rounded-xl" style={{ background: 'rgba(30,34,45,0.4)' }}>
                       <div className="flex items-center gap-2 mb-1">
@@ -636,8 +611,6 @@ export default function DashboardPage() {
                       </p>
                     </div>
                   </div>
-
-                  {/* Daylight bar */}
                   {sunriseTime && sunsetTime && (() => {
                     const now = Date.now();
                     const rise = new Date(sunriseTime).getTime();
@@ -648,8 +621,7 @@ export default function DashboardPage() {
                     return (
                       <div>
                         <div className="flex justify-between text-xs text-bone/25 mb-1">
-                          <span>Dawn</span>
-                          <span>Dusk</span>
+                          <span>Dawn</span><span>Dusk</span>
                         </div>
                         <div className="h-1.5 rounded-full" style={{ background: 'rgba(30,34,45,0.8)' }}>
                           <div
@@ -668,10 +640,9 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* ── Row 3: Printer + Shopping List ────────────────────────────── */}
+          {/* Row 3: Printer + Shopping List */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
 
-            {/* Printer ink */}
             {haLoading ? <SkeletonCard delay={0.4} /> : (
               <Card delay={0.4}>
                 <CardTitle>Printer Ink</CardTitle>
@@ -703,12 +674,10 @@ export default function DashboardPage() {
               </Card>
             )}
 
-            {/* Shopping list */}
             {haLoading ? <SkeletonCard delay={0.48} /> : (
               <Card delay={0.48}>
                 <CardTitle>Shopping List</CardTitle>
                 <div className="space-y-2">
-                  {/* Add item */}
                   <form onSubmit={addTodo} className="flex gap-2 mb-3">
                     <input
                       type="text"
@@ -735,7 +704,6 @@ export default function DashboardPage() {
                       Add
                     </button>
                   </form>
-
                   {todos.length === 0 ? (
                     <p className="text-xs text-bone/25 text-center py-3">List is empty</p>
                   ) : (
@@ -754,7 +722,7 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* ── Row 4: Placeholder panels ─────────────────────────────────── */}
+          {/* Row 4: Placeholders */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {[
               { icon: Camera, label: 'Camera feeds' },
