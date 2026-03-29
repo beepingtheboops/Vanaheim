@@ -1,5 +1,5 @@
 export const runtime = 'edge';
-
+ 
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuthenticationResponse } from '@simplewebauthn/server';
 import {
@@ -10,34 +10,34 @@ import {
   logAuditEvent,
 } from '@/lib/db';
 import { createToken, createSessionCookie } from '@/lib/auth';
-
+ 
 const RP_ID = 'thewillsons.com';
 const ORIGIN = 'https://thewillsons.com';
-
+ 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { userId } = body;
-
+ 
     if (!userId) {
       return NextResponse.json({ error: 'User ID required' }, { status: 400 });
     }
-
+ 
     const user = await findUserById(userId);
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
-
+ 
     const expectedChallenge = await getAndDeleteChallenge(userId, 'authentication');
     if (!expectedChallenge) {
       return NextResponse.json({ error: 'Challenge expired or not found' }, { status: 400 });
     }
-
+ 
     const passkey = await getPasskeyByCredentialId(body.id);
     if (!passkey || passkey.user_id !== userId) {
       return NextResponse.json({ error: 'Passkey not found' }, { status: 404 });
     }
-
+ 
     // Cast opts to any — @simplewebauthn/server@10 uses 'credential' at runtime
     // but TypeScript types still reference 'authenticator' from v9
     const verifyOpts: any = {
@@ -53,19 +53,19 @@ export async function POST(request: NextRequest) {
       },
       requireUserVerification: true,
     };
-
+ 
     const verification = await verifyAuthenticationResponse(verifyOpts);
-
+ 
     if (!verification.verified) {
       return NextResponse.json({ error: 'Passkey verification failed' }, { status: 401 });
     }
-
+ 
     const authInfo = verification.authenticationInfo as any;
     const newCounter = authInfo?.newCounter ?? authInfo?.counter ?? passkey.counter;
-
+ 
     await updatePasskeyCounter(passkey.credential_id, newCounter);
     await logAuditEvent(user.id, 'passkey_login', null, null);
-
+ 
     const jwtToken = await createToken({
       id: user.id,
       name: user.name,
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
       role: user.role,
       avatar: user.avatar,
     });
-
+ 
     const response = NextResponse.json({
       success: true,
       user: {
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
         avatar: user.avatar,
       },
     });
-
+ 
     response.headers.set('Set-Cookie', createSessionCookie(jwtToken));
     return response;
   } catch (error) {
@@ -92,3 +92,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Authentication failed' }, { status: 500 });
   }
 }
+ 
