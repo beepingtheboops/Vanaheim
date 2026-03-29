@@ -1,4 +1,4 @@
-const TURNSTILE_SECRET = '0x4AAAAAACr248SLRatGHU64JnVgk9YJM1o';
+const TURNSTILE_SECRET = process.env.TURNSTILE_SECRET_KEY || '';
 const TURNSTILE_VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
 
 export async function verifyTurnstile(token: string, ip?: string): Promise<boolean> {
