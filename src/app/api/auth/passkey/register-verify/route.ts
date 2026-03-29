@@ -2,6 +2,7 @@ export const runtime = 'edge';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyRegistrationResponse } from '@simplewebauthn/server';
+import { isoBase64URL } from '@simplewebauthn/server/helpers';
 import { verifyToken, getTokenFromCookies } from '@/lib/auth';
 import {
   findUserById,
@@ -37,7 +38,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Challenge expired or not found' }, { status: 400 });
     }
 
-    // Safely normalize transports — Android QR and some authenticators omit this field
     const transports = Array.isArray(body?.response?.transports)
       ? body.response.transports
       : [];
@@ -62,21 +62,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Passkey verification failed' }, { status: 400 });
     }
 
-    // Cast to any to work around stale TypeScript types in @simplewebauthn/server@10
     const info = verification.registrationInfo as any;
-
-    // v10 uses registrationInfo.credential.{id,publicKey,counter}
     const credentialId = info.credential?.id ?? info.credentialID;
     const credentialPublicKey = info.credential?.publicKey ?? info.credentialPublicKey;
     const credentialCounter = info.credential?.counter ?? info.counter ?? 0;
     const credentialDeviceType = info.credentialDeviceType ?? info.credential?.deviceType ?? null;
     const credentialBackedUp = info.credentialBackedUp ?? info.credential?.backedUp ?? false;
 
+    // Store public key using isoBase64URL for consistent encoding/decoding
+    const publicKeyBase64 = isoBase64URL.fromBuffer(credentialPublicKey);
+
+    console.log('Storing passkey, public key length:', credentialPublicKey.length, 'base64 length:', publicKeyBase64.length);
+
     await createPasskey({
       id: crypto.randomUUID(),
       userId: user.id,
       credentialId,
-      publicKey: Buffer.from(credentialPublicKey).toString('base64'),
+      publicKey: publicKeyBase64,
       counter: credentialCounter,
       deviceType: credentialDeviceType,
       backedUp: credentialBackedUp,
@@ -87,8 +89,8 @@ export async function POST(request: NextRequest) {
     await logAuditEvent(user.id, 'passkey_registered', null, `Device type: ${credentialDeviceType}`);
 
     return NextResponse.json({ verified: true });
-  } catch (error) {
-    console.error('Passkey register verify error:', error);
+  } catch (error: any) {
+    console.error('Passkey register verify error:', error?.message);
     return NextResponse.json({ error: 'Registration failed' }, { status: 500 });
   }
 }

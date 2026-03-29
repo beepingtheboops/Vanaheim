@@ -2,6 +2,7 @@ export const runtime = 'edge';
  
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuthenticationResponse } from '@simplewebauthn/server';
+import { isoBase64URL } from '@simplewebauthn/server/helpers';
 import {
   findUserById,
   getPasskeyByCredentialId,
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest) {
       public_key_length: passkey.public_key?.length,
     }));
  
-    const publicKeyBuffer = Buffer.from(passkey.public_key, 'base64');
+    const publicKeyBuffer = isoBase64URL.toBuffer(passkey.public_key);
     console.log('public key buffer length:', publicKeyBuffer.length);
  
     const verifyOpts: any = {
