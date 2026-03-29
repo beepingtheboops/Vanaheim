@@ -38,27 +38,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Passkey not found' }, { status: 404 });
     }
 
-    const verification = await verifyAuthenticationResponse({
+    // Cast opts to any — @simplewebauthn/server@10 uses 'credential' at runtime
+    // but TypeScript types still reference 'authenticator' from v9
+    const verifyOpts: any = {
       response: body,
       expectedChallenge,
       expectedOrigin: ORIGIN,
       expectedRPID: RP_ID,
-      // Cast to any to work around stale TypeScript types in @simplewebauthn/server@10
       credential: {
         id: passkey.credential_id,
         publicKey: Buffer.from(passkey.public_key, 'base64'),
         counter: passkey.counter,
         transports: passkey.transports ? JSON.parse(passkey.transports) : undefined,
-      } as any,
+      },
       requireUserVerification: true,
-    });
+    };
+
+    const verification = await verifyAuthenticationResponse(verifyOpts);
 
     if (!verification.verified) {
       return NextResponse.json({ error: 'Passkey verification failed' }, { status: 401 });
     }
 
     const authInfo = verification.authenticationInfo as any;
-    const newCounter = authInfo.newCounter ?? authInfo.counter ?? passkey.counter;
+    const newCounter = authInfo?.newCounter ?? authInfo?.counter ?? passkey.counter;
 
     await updatePasskeyCounter(passkey.credential_id, newCounter);
     await logAuditEvent(user.id, 'passkey_login', null, null);
