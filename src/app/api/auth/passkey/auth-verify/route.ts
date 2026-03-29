@@ -58,16 +58,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Passkey verification failed' }, { status: 401 });
     }
  
-    // Safely extract counter — handle all possible property names across v9/v10
-    let newCounter = passkey.counter;
-    try {
-      const info = verification.authenticationInfo as any;
-      if (info !== undefined && info !== null) {
-        newCounter = info.newCounter ?? info.counter ?? info.credentialCounter ?? passkey.counter;
-      }
-    } catch {
-      // keep existing counter if extraction fails
-    }
+    // authenticationInfo may be undefined in some simplewebauthn v10 edge runtime builds
+    // safely increment counter without reading from it
+    const newCounter = (passkey.counter ?? 0) + 1;
  
     await updatePasskeyCounter(passkey.credential_id, newCounter);
     await logAuditEvent(user.id, 'passkey_login', null, null);
