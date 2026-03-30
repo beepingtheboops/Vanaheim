@@ -3,9 +3,6 @@ pages_build_output_dir = ".vercel/output/static"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
-[vars]
-TURNSTILE_SECRET_KEY = "0x4AAAAAACr248SLRatGHU64JnVgk9YJM1o"
-
 [[d1_databases]]
 binding = "DB"
 database_name = "vanaheim-db"
