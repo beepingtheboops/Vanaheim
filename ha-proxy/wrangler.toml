@@ -1,3 +1,11 @@
-name = "super-rain-384e"
-main = "src/index.ts"
-compatibility_date = "2024-01-01"
+name = "vanaheim"
+pages_build_output_dir = ".vercel/output/static"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+ 
+
+ 
+[[d1_databases]]
+binding = "DB"
+database_name = "vanaheim-db"
+database_id = "a80343ec-10cf-4212-b3eb-64c670e58d17"
