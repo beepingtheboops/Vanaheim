@@ -251,11 +251,8 @@ export default function LoginPage() {
       const verifyData = await verifyRes.json();
 
       if (verifyData.success) {
-        // Update auth context
-        const meRes = await fetch('/api/auth/me');
-        if (meRes.ok) {
-          router.push('/dashboard');
-        }
+        // Force full page reload to refresh auth context
+        window.location.href = '/dashboard';
       } else {
         setError(verifyData.error || 'Passkey authentication failed');
         setShowPasswordForm(true);

@@ -8,7 +8,7 @@ import {
   Droplets, Bot, Sun, Calendar, Bell, Settings,
   RefreshCw, Battery, Home, Unlock,
   MapPin, Sunrise, Sunset, Printer, ShoppingCart,
-  Cloud, Wind, Droplet,
+  Cloud, Wind, Droplet, Menu, X,
 } from 'lucide-react';
 
 const REFRESH_INTERVAL = 30_000;
@@ -104,28 +104,6 @@ function Card({ children, className = '', delay = 0 }: {
   );
 }
 
-function CardTitle({ children }: { children: React.ReactNode }) {
-  return (
-    <h3 className="text-xs tracking-[0.2em] uppercase text-gold-dark mb-4">
-      {children}
-    </h3>
-  );
-}
-
-function SkeletonCard({ delay = 0 }: { delay?: number }) {
-  return (
-    <div
-      className="rounded-xl p-5 animate-pulse"
-      style={{
-        background: 'rgba(19, 22, 29, 0.7)',
-        border: '1px solid rgba(201, 168, 76, 0.08)',
-        animationDelay: `${delay}s`,
-        minHeight: 120,
-      }}
-    />
-  );
-}
-
 export default function DashboardPage() {
   const { user, loading, logout } = useAuth();
   const router = useRouter();
@@ -138,6 +116,7 @@ export default function DashboardPage() {
   const [activeNav, setActiveNav] = useState('Overview');
   const [lockLoading, setLockLoading] = useState(false);
   const [newTodo, setNewTodo] = useState('');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) router.push('/');
@@ -145,10 +124,11 @@ export default function DashboardPage() {
 
   const fetchStates = useCallback(async () => {
     try {
-      const res = await fetch('/api/ha/states');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data: HaState[] = await res.json();
-      const map = Object.fromEntries(data.map(s => [s.entity_id, s]));
+      const res = await fetch('/api/ha/api/states');
+      if (!res.ok) throw new Error('Failed to fetch HA states');
+      const data = await res.json();
+      const map: Record<string, HaState> = {};
+      data.forEach((s: HaState) => { map[s.entity_id] = s; });
       setStates(map);
       setLastUpdated(new Date());
       setHaError(false);
@@ -161,18 +141,22 @@ export default function DashboardPage() {
 
   const fetchTodos = useCallback(async () => {
     try {
-      const res2 = await fetch('/api/ha/states/todo.shopping_list');
-      if (res2.ok) {
-        const data = await res2.json();
-        const items = (data.attributes?.items as TodoItem[]) || [];
-        setTodos(items);
-      }
+      const res = await fetch('/api/ha/api/services/todo/get_items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entity_id: 'todo.family_shopping_list' }),
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const items = data?.['todo.family_shopping_list']?.items ?? [];
+      setTodos(items.filter((i: TodoItem) => i.status !== 'completed'));
     } catch {
-      // silently fail
+      // Ignore todo errors
     }
   }, []);
 
   useEffect(() => {
+    if (!user) return;
     fetchStates();
     fetchTodos();
     const interval = setInterval(() => {
@@ -180,103 +164,80 @@ export default function DashboardPage() {
       fetchTodos();
     }, REFRESH_INTERVAL);
     return () => clearInterval(interval);
-  }, [fetchStates, fetchTodos]);
+  }, [user, fetchStates, fetchTodos]);
 
-  const callService = useCallback(async (domain: string, service: string, data: Record<string, unknown>) => {
-    const res = await fetch(`/api/ha/services/${domain}/${service}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error(`Service call failed: ${res.status}`);
-    return res.json();
-  }, []);
-
-  const toggleLock = useCallback(async () => {
-    const lock = states[ENTITIES.locks[0]];
-    if (!lock || lockLoading) return;
+  const toggleLock = async (entityId: string) => {
     setLockLoading(true);
-    setStates(prev => ({
-      ...prev,
-      [ENTITIES.locks[0]]: {
-        ...prev[ENTITIES.locks[0]],
-        state: lock.state === 'locked' ? 'unlocked' : 'locked',
-      }
-    }));
+    const currentState = states[entityId]?.state;
+    const service = currentState === 'locked' ? 'unlock' : 'lock';
     try {
-      const service = lock.state === 'locked' ? 'unlock' : 'lock';
-      await callService('lock', service, { entity_id: ENTITIES.locks[0] });
-      setTimeout(fetchStates, 2000);
+      await fetch('/api/ha/api/services/lock/' + service, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entity_id: entityId }),
+      });
+      setTimeout(fetchStates, 1000);
     } catch {
-      setStates(prev => ({ ...prev, [ENTITIES.locks[0]]: lock }));
+      // Ignore
     } finally {
       setLockLoading(false);
     }
-  }, [states, lockLoading, callService, fetchStates]);
+  };
 
-  const addTodo = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
+  const addTodo = async () => {
     if (!newTodo.trim()) return;
     try {
-      await callService('todo', 'add_item', {
-        entity_id: 'todo.shopping_list',
-        item: newTodo.trim(),
+      await fetch('/api/ha/api/services/todo/add_item', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          entity_id: 'todo.family_shopping_list',
+          item: newTodo.trim(),
+        }),
       });
       setNewTodo('');
       setTimeout(fetchTodos, 500);
     } catch {
-      // silently fail
+      // Ignore
     }
-  }, [newTodo, callService, fetchTodos]);
+  };
 
-  if (loading) {
+  if (loading || !user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-void">
-        <div className="w-8 h-8 border-2 border-gold/30 border-t-gold rounded-full animate-spin" />
+      <div className="grain-overlay min-h-screen bg-void flex items-center justify-center">
+        <div className="text-bone/50">Loading...</div>
       </div>
     );
   }
 
-  if (!user) return null;
+  const lockEntity = states[ENTITIES.locks[0]];
+  const lockState = lockEntity?.state ?? 'unknown';
+  const lockBattery = states[ENTITIES.lockBattery]?.state ?? '—';
+  const lockOperator = states[ENTITIES.lockOperator]?.state ?? '—';
 
-  const lock = states[ENTITIES.locks[0]];
-  const battery = states[ENTITIES.lockBattery];
-  const operator = states[ENTITIES.lockOperator];
-  const weather = states[ENTITIES.weather];
-  const person = states[ENTITIES.person];
-  const wan = states[ENTITIES.wanStatus];
-  const externalIp = states[ENTITIES.externalIp];
-  const sun = states[ENTITIES.sun];
-  const printerBlack = states[ENTITIES.printerBlack];
-  const printerCyan = states[ENTITIES.printerCyan];
-  const printerMagenta = states[ENTITIES.printerMagenta];
-  const printerYellow = states[ENTITIES.printerYellow];
+  const weatherEntity = states[ENTITIES.weather];
+  const temp = weatherEntity?.attributes?.temperature ?? '—';
+  const condition = (weatherEntity?.attributes?.condition ?? 'unknown') as string;
+  const forecast = (weatherEntity?.attributes?.forecast ?? []) as any[];
+  const todayForecast = forecast[0] ?? {};
 
-  const isLocked = lock?.state === 'locked';
-  const batteryLevel = battery ? parseInt(battery.state) : null;
-  const isHome = person?.state === 'home';
-  const isOnline = wan?.state === 'on';
-  const sunriseTime = sun?.attributes?.next_rising as string;
-  const sunsetTime = sun?.attributes?.next_setting as string;
-  const isBelowHorizon = sun?.state === 'below_horizon';
+  const personEntity = states[ENTITIES.person];
+  const personState = personEntity?.state ?? '—';
+  const personChanged = personEntity?.last_changed;
 
-  const weatherTemp = weather?.attributes?.temperature as number | undefined;
-  const weatherCondition = weather?.state || '';
-  const weatherHumidity = weather?.attributes?.humidity as number | undefined;
-  const weatherWind = weather?.attributes?.wind_speed as number | undefined;
-  const weatherForecast = weather?.attributes?.forecast as Array<{
-    datetime: string;
-    temperature: number;
-    templow: number;
-    condition: string;
-  }> | undefined;
+  const wanEntity = states[ENTITIES.wanStatus];
+  const wanOnline = wanEntity?.state === 'on';
+  const ipEntity = states[ENTITIES.externalIp];
+  const externalIp = ipEntity?.state ?? '—';
 
-  const inkLevels = [
-    { label: 'Black', level: printerBlack ? parseInt(printerBlack.state) : null, color: '#94a3b8' },
-    { label: 'Cyan', level: printerCyan ? parseInt(printerCyan.state) : null, color: '#38bdf8' },
-    { label: 'Magenta', level: printerMagenta ? parseInt(printerMagenta.state) : null, color: '#f472b6' },
-    { label: 'Yellow', level: printerYellow ? parseInt(printerYellow.state) : null, color: '#fbbf24' },
-  ];
+  const sunEntity = states[ENTITIES.sun];
+  const sunNextRising = sunEntity?.attributes?.next_rising;
+  const sunNextSetting = sunEntity?.attributes?.next_setting;
+
+  const blackInk = parseInt(states[ENTITIES.printerBlack]?.state ?? '0');
+  const cyanInk = parseInt(states[ENTITIES.printerCyan]?.state ?? '0');
+  const magentaInk = parseInt(states[ENTITIES.printerMagenta]?.state ?? '0');
+  const yellowInk = parseInt(states[ENTITIES.printerYellow]?.state ?? '0');
 
   return (
     <div className="grain-overlay min-h-screen bg-void">
@@ -291,6 +252,12 @@ export default function DashboardPage() {
         }}
       >
         <div className="flex items-center gap-4">
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="p-2 rounded-lg hover:bg-smoke/50 transition-colors lg:hidden"
+          >
+            <Menu size={20} className="text-bone/70" />
+          </button>
           <Shield className="w-5 h-5 text-gold" strokeWidth={1.5} />
           <span className="font-display text-lg tracking-wider text-gold">Vanaheim</span>
           <span className={`text-xs px-3 py-1 rounded-full font-medium transition-all ${
@@ -331,6 +298,66 @@ export default function DashboardPage() {
           </button>
         </div>
       </header>
+
+      {/* Mobile menu overlay */}
+      {mobileMenuOpen && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/60 z-40 lg:hidden"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          {/* Slide-in menu */}
+          <nav
+            className="fixed top-0 left-0 bottom-0 w-72 z-50 p-6 lg:hidden"
+            style={{
+              background: 'rgba(10, 12, 16, 0.98)',
+              borderRight: '1px solid rgba(201, 168, 76, 0.15)',
+              backdropFilter: 'blur(12px)',
+            }}
+          >
+            <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center gap-3">
+                <Shield className="w-5 h-5 text-gold" strokeWidth={1.5} />
+                <span className="font-display text-lg tracking-wider text-gold">Menu</span>
+              </div>
+              <button
+                onClick={() => setMobileMenuOpen(false)}
+                className="p-2 rounded-lg hover:bg-smoke/50 transition-colors"
+              >
+                <X size={20} className="text-bone/70" />
+              </button>
+            </div>
+            <div className="space-y-1">
+              {NAV_ITEMS.map(item => {
+                const active = activeNav === item.label;
+                return (
+                  <button
+                    key={item.label}
+                    onClick={() => {
+                      if (item.href) {
+                        router.push(item.href);
+                      } else {
+                        setActiveNav(item.label);
+                      }
+                      setMobileMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200"
+                    style={{
+                      background: active ? 'rgba(201, 168, 76, 0.08)' : 'transparent',
+                      color: active ? 'var(--gold)' : 'rgba(209, 199, 183, 0.5)',
+                      border: active ? '1px solid rgba(201, 168, 76, 0.15)' : '1px solid transparent',
+                    }}
+                  >
+                    <item.icon size={18} />
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
+          </nav>
+        </>
+      )}
 
       <div className="flex">
 
@@ -378,373 +405,223 @@ export default function DashboardPage() {
               Welcome home, {user.name}
             </h2>
             <p className="text-sm text-gold-dark/60">
-              {haError
-                ? 'Unable to reach Home Assistant — check your connection.'
-                : `${isBelowHorizon ? 'Good evening' : 'Good day'} — the realm is secure.`}
+              {haError ? 'Unable to reach Home Assistant — check your connection.' : 'All systems operational'}
             </p>
           </div>
 
-          {/* Row 1: Front Door + Presence + Network */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
 
-            {haLoading ? <SkeletonCard delay={0} /> : (
-              <Card delay={0}>
-                <CardTitle>Front Door</CardTitle>
-                <div className="space-y-3">
-                  <div
-                    className="flex items-center justify-between p-4 rounded-xl"
-                    style={{
-                      background: isLocked ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)',
-                      border: `1px solid ${isLocked ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`,
-                    }}
-                  >
-                    <div className="flex items-center gap-3">
-                      {isLocked
-                        ? <Lock size={20} style={{ color: '#22c55e' }} />
-                        : <Unlock size={20} style={{ color: '#ef4444' }} />
-                      }
-                      <div>
-                        <p className="text-sm font-medium" style={{ color: isLocked ? '#22c55e' : '#ef4444' }}>
-                          {lock ? capitalize(lock.state) : '—'}
-                        </p>
-                        {operator && operator.state !== 'unknown' && (
-                          <p className="text-xs text-bone/30">{capitalize(operator.state)}</p>
-                        )}
-                      </div>
-                    </div>
-                    {lock && (
-                      <button
-                        onClick={toggleLock}
-                        disabled={lockLoading}
-                        className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-50"
-                        style={{
-                          background: isLocked ? 'rgba(239,68,68,0.15)' : 'rgba(34,197,94,0.15)',
-                          color: isLocked ? '#ef4444' : '#22c55e',
-                          border: `1px solid ${isLocked ? 'rgba(239,68,68,0.3)' : 'rgba(34,197,94,0.3)'}`,
-                        }}
-                      >
-                        {lockLoading ? '...' : isLocked ? 'Unlock' : 'Lock'}
-                      </button>
-                    )}
-                  </div>
-
-                  {batteryLevel !== null && (
-                    <div className="flex items-center justify-between px-1">
-                      <div className="flex items-center gap-2">
-                        <Battery size={14} style={{ color: inkColor(batteryLevel) }} />
-                        <span className="text-xs text-bone/40">Battery</span>
-                      </div>
-                      <div className="flex items-center gap-2 flex-1 mx-3">
-                        <div className="flex-1 h-1 rounded-full" style={{ background: 'rgba(30,34,45,0.8)' }}>
-                          <div
-                            className="h-1 rounded-full transition-all"
-                            style={{ width: `${batteryLevel}%`, background: inkColor(batteryLevel) }}
-                          />
-                        </div>
-                      </div>
-                      <span className="text-xs font-mono" style={{ color: inkColor(batteryLevel) }}>
-                        {batteryLevel}%
-                      </span>
-                    </div>
-                  )}
-
-                  {lock && (
-                    <p className="text-xs text-bone/25 text-right">
-                      {formatTime(lock.last_changed)}
-                    </p>
-                  )}
-                </div>
-              </Card>
-            )}
-
-            {haLoading ? <SkeletonCard delay={0.08} /> : (
-              <Card delay={0.08}>
-                <CardTitle>Presence</CardTitle>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 rounded-xl"
-                    style={{ background: 'rgba(30,34,45,0.4)' }}>
-                    <div className="flex items-center gap-3">
-                      <span className="text-xl">{user.avatar}</span>
-                      <div>
-                        <p className="text-sm font-medium text-bone">Matt</p>
-                        <p className="text-xs" style={{ color: isHome ? '#22c55e' : '#64748b' }}>
-                          {person ? capitalize(person.state) : '—'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="w-2 h-2 rounded-full" style={{ background: isHome ? '#22c55e' : '#64748b' }} />
-                  </div>
-                  <div className="flex items-center gap-2 px-1">
-                    <MapPin size={14} className="text-bone/30" />
-                    <span className="text-xs text-bone/30">
-                      {isHome ? 'At home' : 'Away from home'}
-                    </span>
-                  </div>
-                  <p className="text-xs text-bone/20 px-1">
-                    Add family members in HA to track everyone
-                  </p>
-                </div>
-              </Card>
-            )}
-
-            {haLoading ? <SkeletonCard delay={0.16} /> : (
-              <Card delay={0.16}>
-                <CardTitle>Network</CardTitle>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 rounded-xl"
-                    style={{ background: 'rgba(30,34,45,0.4)' }}>
-                    <div className="flex items-center gap-3">
-                      <Wifi size={18} style={{ color: isOnline ? '#22c55e' : '#ef4444' }} />
-                      <div>
-                        <p className="text-sm font-medium text-bone">Internet</p>
-                        <p className="text-xs" style={{ color: isOnline ? '#22c55e' : '#ef4444' }}>
-                          {wan ? (isOnline ? 'Online' : 'Offline') : '—'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="w-2 h-2 rounded-full" style={{ background: isOnline ? '#22c55e' : '#ef4444' }} />
-                  </div>
-                  {externalIp && (
-                    <div className="flex items-center justify-between px-1">
-                      <span className="text-xs text-bone/40">External IP</span>
-                      <span className="text-xs font-mono text-bone/50">{externalIp.state}</span>
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between px-1">
-                    <span className="text-xs text-bone/40">Provider</span>
-                    <span className="text-xs text-bone/50">Eero</span>
-                  </div>
-                </div>
-              </Card>
-            )}
-          </div>
-
-          {/* Row 2: Weather + Daylight */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-
-            {haLoading ? <SkeletonCard delay={0.24} /> : (
-              <Card delay={0.24}>
-                <CardTitle>Weather</CardTitle>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-4xl font-bold font-mono text-bone">
-                        {weatherTemp !== undefined ? `${Math.round(weatherTemp)}°F` : '—'}
-                      </p>
-                      <p className="text-sm text-bone/50 mt-1">{capitalize(weatherCondition)}</p>
-                    </div>
-                    <div className="space-y-2 text-right">
-                      {weatherHumidity !== undefined && (
-                        <div className="flex items-center gap-2 justify-end">
-                          <span className="text-xs text-bone/40">Humidity</span>
-                          <div className="flex items-center gap-1">
-                            <Droplet size={12} className="text-blue-400" />
-                            <span className="text-xs font-mono text-bone/60">{weatherHumidity}%</span>
-                          </div>
-                        </div>
-                      )}
-                      {weatherWind !== undefined && (
-                        <div className="flex items-center gap-2 justify-end">
-                          <span className="text-xs text-bone/40">Wind</span>
-                          <div className="flex items-center gap-1">
-                            <Wind size={12} className="text-bone/40" />
-                            <span className="text-xs font-mono text-bone/60">{weatherWind} mph</span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  {weatherForecast && weatherForecast.length > 0 && (
-                    <div className="grid grid-cols-4 gap-2 pt-3 border-t border-gold/5">
-                      {weatherForecast.slice(0, 4).map((day, i) => (
-                        <div key={i} className="text-center">
-                          <p className="text-xs text-bone/30 mb-1">
-                            {new Date(day.datetime).toLocaleDateString('en-US', { weekday: 'short' })}
-                          </p>
-                          <Cloud size={14} className="text-bone/30 mx-auto mb-1" />
-                          <p className="text-xs font-mono text-bone/60">{Math.round(day.temperature)}°</p>
-                          {day.templow !== undefined && (
-                            <p className="text-xs font-mono text-bone/30">{Math.round(day.templow)}°</p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </Card>
-            )}
-
-            {haLoading ? <SkeletonCard delay={0.32} /> : (
-              <Card delay={0.32}>
-                <CardTitle>Daylight</CardTitle>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div
-                      className="px-4 py-2 rounded-full text-xs font-medium"
-                      style={{
-                        background: isBelowHorizon ? 'rgba(100,116,139,0.15)' : 'rgba(251,191,36,0.1)',
-                        color: isBelowHorizon ? '#64748b' : '#fbbf24',
-                        border: `1px solid ${isBelowHorizon ? 'rgba(100,116,139,0.2)' : 'rgba(251,191,36,0.2)'}`,
-                      }}
-                    >
-                      {isBelowHorizon ? '🌙 Night' : '☀️ Day'}
-                    </div>
-                    <p className="text-xs text-bone/30">Huntington Beach, CA</p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="p-3 rounded-xl" style={{ background: 'rgba(30,34,45,0.4)' }}>
-                      <div className="flex items-center gap-2 mb-1">
-                        <Sunrise size={14} style={{ color: '#fbbf24' }} />
-                        <span className="text-xs text-bone/40">Sunrise</span>
-                      </div>
-                      <p className="text-sm font-mono text-bone/70">
-                        {sunriseTime ? formatTimeOfDay(sunriseTime) : '—'}
-                      </p>
-                    </div>
-                    <div className="p-3 rounded-xl" style={{ background: 'rgba(30,34,45,0.4)' }}>
-                      <div className="flex items-center gap-2 mb-1">
-                        <Sunset size={14} style={{ color: '#f97316' }} />
-                        <span className="text-xs text-bone/40">Sunset</span>
-                      </div>
-                      <p className="text-sm font-mono text-bone/70">
-                        {sunsetTime ? formatTimeOfDay(sunsetTime) : '—'}
-                      </p>
-                    </div>
-                  </div>
-                  {sunriseTime && sunsetTime && (() => {
-                    const now = Date.now();
-                    const rise = new Date(sunriseTime).getTime();
-                    const set = new Date(sunsetTime).getTime();
-                    const total = set - rise;
-                    const elapsed = Math.max(0, Math.min(total, now - rise));
-                    const pct = total > 0 ? (elapsed / total) * 100 : 0;
-                    return (
-                      <div>
-                        <div className="flex justify-between text-xs text-bone/25 mb-1">
-                          <span>Dawn</span><span>Dusk</span>
-                        </div>
-                        <div className="h-1.5 rounded-full" style={{ background: 'rgba(30,34,45,0.8)' }}>
-                          <div
-                            className="h-1.5 rounded-full"
-                            style={{
-                              width: `${Math.min(100, pct)}%`,
-                              background: 'linear-gradient(90deg, #fbbf24, #f97316)',
-                            }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-              </Card>
-            )}
-          </div>
-
-          {/* Row 3: Printer + Shopping List */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-
-            {haLoading ? <SkeletonCard delay={0.4} /> : (
-              <Card delay={0.4}>
-                <CardTitle>Printer Ink</CardTitle>
-                <div className="space-y-3">
-                  {inkLevels.map(ink => (
-                    <div key={ink.label} className="flex items-center gap-3">
-                      <div className="flex items-center gap-2 w-16">
-                        <Printer size={12} style={{ color: ink.color }} />
-                        <span className="text-xs text-bone/40">{ink.label}</span>
-                      </div>
-                      <div className="flex-1 h-1.5 rounded-full" style={{ background: 'rgba(30,34,45,0.8)' }}>
-                        <div
-                          className="h-1.5 rounded-full transition-all"
-                          style={{
-                            width: ink.level !== null ? `${ink.level}%` : '0%',
-                            background: ink.level !== null ? inkColor(ink.level) : '#64748b',
-                          }}
-                        />
-                      </div>
-                      <span
-                        className="text-xs font-mono w-8 text-right"
-                        style={{ color: ink.level !== null ? inkColor(ink.level) : '#64748b' }}
-                      >
-                        {ink.level !== null ? `${ink.level}%` : '—'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            )}
-
-            {haLoading ? <SkeletonCard delay={0.48} /> : (
-              <Card delay={0.48}>
-                <CardTitle>Shopping List</CardTitle>
-                <div className="space-y-2">
-                  <form onSubmit={addTodo} className="flex gap-2 mb-3">
-                    <input
-                      type="text"
-                      value={newTodo}
-                      onChange={e => setNewTodo(e.target.value)}
-                      placeholder="Add item..."
-                      className="flex-1 text-sm px-3 py-2 rounded-lg"
-                      style={{
-                        background: 'rgba(30,34,45,0.6)',
-                        border: '1px solid rgba(201,168,76,0.1)',
-                        color: 'var(--bone)',
-                        outline: 'none',
-                      }}
-                    />
-                    <button
-                      type="submit"
-                      className="px-3 py-2 rounded-lg text-xs font-medium transition-all"
-                      style={{
-                        background: 'rgba(201,168,76,0.1)',
-                        color: 'var(--gold)',
-                        border: '1px solid rgba(201,168,76,0.2)',
-                      }}
-                    >
-                      Add
-                    </button>
-                  </form>
-                  {todos.length === 0 ? (
-                    <p className="text-xs text-bone/25 text-center py-3">List is empty</p>
-                  ) : (
-                    <div className="space-y-1 max-h-32 overflow-y-auto">
-                      {todos.filter(t => t.status !== 'completed').map((item, i) => (
-                        <div key={i} className="flex items-center gap-3 py-2 px-3 rounded-lg"
-                          style={{ background: 'rgba(30,34,45,0.4)' }}>
-                          <ShoppingCart size={12} className="text-bone/30 flex-shrink-0" />
-                          <span className="text-sm text-bone/70 truncate">{item.summary}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </Card>
-            )}
-          </div>
-
-          {/* Row 4: Placeholders */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            {[
-              { icon: Camera, label: 'Camera feeds' },
-              { icon: Sun, label: 'Lights' },
-              { icon: Thermometer, label: 'Climate' },
-            ].map((item, i) => (
-              <div
-                key={item.label}
-                className="rounded-xl p-8 text-center animate-slide-up"
+            {/* Front Door Lock */}
+            <Card delay={0.05}>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-medium tracking-wider text-gold-dark uppercase">Front Door</h3>
+                <Lock size={16} className="text-gold/40" />
+              </div>
+              <button
+                onClick={() => toggleLock(ENTITIES.locks[0])}
+                disabled={lockLoading || haLoading}
+                className="w-full p-4 rounded-lg transition-all duration-200 mb-3"
                 style={{
-                  background: 'rgba(19, 22, 29, 0.4)',
-                  border: '1px dashed rgba(201, 168, 76, 0.12)',
-                  animationDelay: `${0.56 + i * 0.08}s`,
-                  animationFillMode: 'backwards',
+                  background: lockState === 'locked'
+                    ? 'rgba(34, 197, 94, 0.08)'
+                    : 'rgba(239, 68, 68, 0.08)',
+                  border: lockState === 'locked'
+                    ? '1px solid rgba(34, 197, 94, 0.2)'
+                    : '1px solid rgba(239, 68, 68, 0.2)',
                 }}
               >
-                <item.icon className="w-8 h-8 text-gold-dark/30 mx-auto mb-3" />
-                <p className="text-sm text-gold-dark/40">{item.label} — coming soon</p>
+                <div className="flex items-center gap-3">
+                  {lockState === 'locked' ? (
+                    <Lock size={20} className="text-green-400" />
+                  ) : (
+                    <Unlock size={20} className="text-red-400" />
+                  )}
+                  <span className="text-sm font-medium text-bone">
+                    {lockLoading ? 'Processing...' : capitalize(lockState)}
+                  </span>
+                </div>
+              </button>
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2 text-bone/40">
+                  <Battery size={14} />
+                  <span>{lockBattery}%</span>
+                </div>
+                <div className="text-bone/40">
+                  <span>Last: {lockOperator}</span>
+                </div>
               </div>
-            ))}
-          </div>
+            </Card>
 
+            {/* Presence */}
+            <Card delay={0.1}>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-medium tracking-wider text-gold-dark uppercase">Presence</h3>
+                <MapPin size={16} className="text-gold/40" />
+              </div>
+              <div className="flex items-center gap-4 mb-2">
+                <div className="text-3xl">{user.avatar}</div>
+                <div>
+                  <p className="text-sm font-medium text-bone">{user.name}</p>
+                  <p className={`text-xs ${personState === 'home' ? 'text-green-400' : 'text-bone/40'}`}>
+                    {personState === 'home' ? '● ' : '○ '}{capitalize(personState)}
+                  </p>
+                </div>
+              </div>
+              {personChanged && (
+                <p className="text-xs text-bone/30 mt-2">
+                  {formatTime(personChanged)}
+                </p>
+              )}
+              <p className="text-xs text-bone/40 mt-4">
+                Add family members in HA to track everyone
+              </p>
+            </Card>
+
+            {/* Network */}
+            <Card delay={0.15}>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-medium tracking-wider text-gold-dark uppercase">Network</h3>
+                <Wifi size={16} className="text-gold/40" />
+              </div>
+              <div className="flex items-center gap-3 mb-4">
+                <div
+                  className="w-10 h-10 rounded-lg flex items-center justify-center"
+                  style={{
+                    background: wanOnline ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                  }}
+                >
+                  <Wifi
+                    size={20}
+                    className={wanOnline ? 'text-green-400' : 'text-red-400'}
+                  />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-bone">Internet</p>
+                  <p className={`text-xs ${wanOnline ? 'text-green-400' : 'text-red-400'}`}>
+                    {wanOnline ? '● Online' : '● Offline'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between text-xs text-bone/40">
+                <span>Provider</span>
+                <span>Eero</span>
+              </div>
+            </Card>
+
+            {/* Weather */}
+            <Card delay={0.2}>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-medium tracking-wider text-gold-dark uppercase">Weather</h3>
+                <Cloud size={16} className="text-gold/40" />
+              </div>
+              <div className="flex items-center justify-between mb-4">
+                <div className="text-3xl font-display text-bone">{temp}°</div>
+                <div className="text-right">
+                  <p className="text-sm text-bone/60 capitalize">{condition}</p>
+                  <p className="text-xs text-bone/40">
+                    {todayForecast?.templow ?? '—'}° / {todayForecast?.temperature ?? '—'}°
+                  </p>
+                </div>
+              </div>
+            </Card>
+
+            {/* Daylight */}
+            <Card delay={0.25}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xs font-medium tracking-wider text-gold-dark uppercase">Daylight</h3>
+                <Sun size={16} className="text-gold/40" />
+              </div>
+              <div className="flex items-center justify-center gap-2 mb-3">
+                <div
+                  className="w-12 h-12 rounded-full flex items-center justify-center"
+                  style={{ background: 'rgba(255, 193, 7, 0.1)' }}
+                >
+                  <Sun size={20} className="text-yellow-400" />
+                </div>
+                <span className="text-sm font-medium text-bone">Day</span>
+              </div>
+              <div className="space-y-2 text-xs text-bone/40">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sunrise size={14} />
+                    <span>Sunrise</span>
+                  </div>
+                  <span>{sunNextRising ? formatTimeOfDay(sunNextRising) : '—'}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sunset size={14} />
+                    <span>Sunset</span>
+                  </div>
+                  <span>{sunNextSetting ? formatTimeOfDay(sunNextSetting) : '—'}</span>
+                </div>
+              </div>
+            </Card>
+
+            {/* Printer Ink */}
+            <Card delay={0.3}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xs font-medium tracking-wider text-gold-dark uppercase">Printer Ink</h3>
+                <Printer size={16} className="text-gold/40" />
+              </div>
+              <div className="space-y-3">
+                {[
+                  { label: 'Black', level: blackInk },
+                  { label: 'Cyan', level: cyanInk },
+                  { label: 'Magenta', level: magentaInk },
+                  { label: 'Yellow', level: yellowInk },
+                ].map(ink => (
+                  <div key={ink.label} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Droplet size={14} style={{ color: inkColor(ink.level) }} />
+                      <span className="text-xs text-bone/60">{ink.label}</span>
+                    </div>
+                    <span className="text-xs text-bone/40">{ink.level}%</span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            {/* Shopping List */}
+            <Card delay={0.35} className="md:col-span-2 lg:col-span-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xs font-medium tracking-wider text-gold-dark uppercase">Shopping List</h3>
+                <ShoppingCart size={16} className="text-gold/40" />
+              </div>
+              <div className="flex gap-2 mb-4">
+                <input
+                  type="text"
+                  value={newTodo}
+                  onChange={e => setNewTodo(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') addTodo(); }}
+                  placeholder="Add item..."
+                  className="flex-1 px-4 py-2 rounded-lg text-sm bg-smoke/30 border border-bone/10 text-bone placeholder:text-bone/30 focus:outline-none focus:border-gold/30"
+                />
+                <button
+                  onClick={addTodo}
+                  className="px-6 py-2 rounded-lg bg-gold/10 border border-gold/20 text-gold text-sm font-medium hover:bg-gold/20 transition-colors"
+                >
+                  Add
+                </button>
+              </div>
+              <div className="space-y-2">
+                {todos.length === 0 ? (
+                  <p className="text-xs text-bone/30 text-center py-4">List is empty</p>
+                ) : (
+                  todos.map(todo => (
+                    <div
+                      key={todo.uid}
+                      className="flex items-center gap-3 px-4 py-2 rounded-lg bg-smoke/20"
+                    >
+                      <div className="w-4 h-4 rounded border border-bone/20" />
+                      <span className="text-sm text-bone/70">{todo.summary}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </Card>
+
+          </div>
         </main>
       </div>
     </div>
