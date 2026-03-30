@@ -273,3 +273,39 @@ export async function clearFailedAttempts(email: string) {
     // non-critical
   }
 }
+
+// ─── Magic Link Tokens ────────────────────────────────────
+
+export async function createMagicLinkToken(data: {
+  id: string;
+  userId: string;
+  tokenHash: string;
+  expiresAt: string;
+}): Promise<void> {
+  const db = getDB();
+  await db.prepare(`
+    INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at, created_at)
+    VALUES (?, ?, ?, ?, datetime('now'))
+  `).bind(data.id, data.userId, data.tokenHash, data.expiresAt).run();
+}
+
+export async function verifyMagicLinkToken(tokenHash: string): Promise<string | null> {
+  const db = getDB();
+  const result = await db.prepare(`
+    SELECT user_id FROM password_reset_tokens
+    WHERE token_hash = ? AND expires_at > datetime('now')
+    LIMIT 1
+  `).bind(tokenHash).first();
+  
+  if (!result) return null;
+  
+  // Delete used token
+  await db.prepare('DELETE FROM password_reset_tokens WHERE token_hash = ?').bind(tokenHash).run();
+  
+  return result.user_id as string;
+}
+
+export async function revokeAllPasskeys(userId: string): Promise<void> {
+  const db = getDB();
+  await db.prepare('DELETE FROM passkeys WHERE user_id = ?').bind(userId).run();
+}

@@ -158,6 +158,10 @@ export default function LoginPage() {
   const [selectedMember, setSelectedMember] = useState<string | null>(null);
   const [turnstileToken, setTurnstileToken] = useState('');
   const [showPasswordForm, setShowPasswordForm] = useState(false);
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState(false);
   const turnstileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -203,12 +207,47 @@ export default function LoginPage() {
     setError('');
     setShowPasswordForm(false);
     setTurnstileToken('');
+    setIsLoading(true);
 
-    // If approved for passkey, try biometric auth immediately
-    if (PASSKEY_EMAILS.includes(member.email)) {
-      await attemptPasskeyAuth(member.email);
-    } else {
-      setShowPasswordForm(true);
+    try {
+      // Check if user has passkey registered
+      const checkRes = await fetch('/api/auth/check-passkey', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: member.email }),
+      });
+
+      const { hasPasskey, sendMagicLink } = await checkRes.json();
+
+      if (hasPasskey) {
+        // User has passkey - prompt for passkey auth
+        setIsLoading(false);
+        await attemptPasskeyAuth(member.email);
+      } else if (sendMagicLink) {
+        // User doesn't have passkey - send magic link automatically
+        const magicLinkRes = await fetch('/api/auth/magic-link/request', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: member.email }),
+        });
+
+        const data = await magicLinkRes.json();
+        setIsLoading(false);
+
+        if (data.success) {
+          setError(''); // Clear any previous errors
+          // Show success message
+          alert(`Magic link sent to ${member.email}! Check your email to sign in.`);
+        } else {
+          setError(data.error || 'Failed to send magic link');
+        }
+      } else {
+        setIsLoading(false);
+        setShowPasswordForm(true);
+      }
+    } catch (err) {
+      setIsLoading(false);
+      setError('An error occurred. Please try again.');
     }
   };
 
@@ -266,6 +305,41 @@ export default function LoginPage() {
       }
     } finally {
       setPasskeyLoading(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!resetEmail) {
+      setError('Please enter your email address');
+      return;
+    }
+
+    setResetLoading(true);
+    setError('');
+
+    try {
+      const res = await fetch('/api/auth/magic-link/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: resetEmail, resetPasskey: true }),
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        setResetSuccess(true);
+        setTimeout(() => {
+          setShowResetModal(false);
+          setResetSuccess(false);
+          setResetEmail('');
+        }, 3000);
+      } else {
+        setError(data.error || 'Failed to send reset link');
+      }
+    } catch (err) {
+      setError('An error occurred. Please try again.');
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -447,6 +521,24 @@ export default function LoginPage() {
                       {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
                   </div>
+                  <div className="mt-2 text-right">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowResetModal(true);
+                        setResetEmail(email);
+                      }}
+                      className="text-xs transition-colors"
+                      style={{ 
+                        color: 'rgba(201,168,76,0.6)', 
+                        fontFamily: "'Cinzel', serif", 
+                        letterSpacing: 2,
+                        textDecoration: 'none'
+                      }}
+                    >
+                      Reset Password
+                    </button>
+                  </div>
                 </div>
 
                 {/* Turnstile */}
@@ -486,6 +578,104 @@ export default function LoginPage() {
           ᚠ ᚢ ᚦ ᚨ ᚱ ᚲ ᚷ ᚹ
         </div>
       </div>
+
+      {/* Reset Password Modal */}
+      {showResetModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6" style={{ background: 'rgba(0,0,0,0.8)' }}>
+          <div
+            className="max-w-md w-full rounded-2xl p-8"
+            style={{
+              background: 'rgba(12, 14, 20, 0.95)',
+              border: '1px solid rgba(201, 168, 76, 0.25)',
+              backdropFilter: 'blur(24px)',
+              boxShadow: '0 30px 80px rgba(0,0,0,0.8)',
+            }}
+          >
+            {resetSuccess ? (
+              <div className="text-center">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-500/10 flex items-center justify-center">
+                  <svg className="w-8 h-8 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <h3 className="text-xl mb-2" style={{ fontFamily: "'Cinzel', serif", color: '#c9a84c' }}>
+                  Magic Link Sent!
+                </h3>
+                <p className="text-sm" style={{ color: 'rgba(201,168,76,0.6)', fontFamily: "'Cinzel', serif" }}>
+                  Check your email to sign in and setup a new passkey
+                </p>
+              </div>
+            ) : (
+              <>
+                <h3 className="text-xl mb-4 text-center" style={{ fontFamily: "'Cinzel', serif", color: '#c9a84c', letterSpacing: 2 }}>
+                  Reset Password
+                </h3>
+                <p className="text-sm mb-6 text-center" style={{ color: 'rgba(201,168,76,0.6)', fontFamily: "'Cinzel', serif" }}>
+                  Enter your email to receive a magic link. You'll be prompted to setup a new passkey after signing in.
+                </p>
+
+                <div className="mb-6">
+                  <label style={{ display: 'block', fontSize: 10, letterSpacing: 3, color: 'rgba(201,168,76,0.55)', marginBottom: 8, textTransform: 'uppercase', fontFamily: "'Cinzel', serif" }}>
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    placeholder="name@thewillsons.com"
+                    autoComplete="email"
+                    className="w-full"
+                  />
+                </div>
+
+                {error && (
+                  <div className="mb-4" style={{ fontSize: 13, textAlign: 'center', padding: '10px 16px', borderRadius: 10, background: 'rgba(139, 37, 0, 0.12)', color: '#f87171', border: '1px solid rgba(139, 37, 0, 0.25)' }}>
+                    {error}
+                  </div>
+                )}
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      setShowResetModal(false);
+                      setResetEmail('');
+                      setError('');
+                    }}
+                    className="flex-1 py-3 rounded-xl font-semibold text-sm uppercase transition-all duration-300"
+                    style={{
+                      background: 'rgba(107,114,128,0.1)',
+                      color: 'rgba(201,168,76,0.6)',
+                      border: '1px solid rgba(107,114,128,0.2)',
+                      fontFamily: "'Cinzel', serif",
+                      letterSpacing: 2,
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleResetPassword}
+                    disabled={resetLoading || !resetEmail}
+                    className="flex-1 py-3 rounded-xl font-semibold text-sm uppercase transition-all duration-300 disabled:opacity-30 disabled:cursor-not-allowed"
+                    style={{
+                      background: 'linear-gradient(135deg, #8a6d2b 0%, #c9a84c 50%, #8a6d2b 100%)',
+                      color: '#0a0c10',
+                      boxShadow: '0 4px 24px rgba(201, 168, 76, 0.15)',
+                      fontFamily: "'Cinzel', serif",
+                      letterSpacing: 2,
+                    }}
+                  >
+                    {resetLoading ? (
+                      <div className="w-5 h-5 mx-auto border-2 border-void/30 border-t-void rounded-full animate-spin" />
+                    ) : (
+                      'Send Link'
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes runeFloat {
