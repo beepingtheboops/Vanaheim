@@ -1,13 +1,8 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
-import { useAuth } from '@/components/AuthProvider';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Eye, EyeOff, ChevronRight, Plus, Fingerprint } from 'lucide-react';
-import {
-  startAuthentication,
-} from '@simplewebauthn/browser';
-
-const TURNSTILE_SITE_KEY = '0x4AAAAAACr241t07alup8tw';
+import { Plus, Fingerprint } from 'lucide-react';
+import { startAuthentication } from '@simplewebauthn/browser';
 
 const FAMILY_QUICK_LOGIN = [
   { name: 'Dad', email: 'matt@thewillsons.com', icon: 'dad' },
@@ -147,67 +142,18 @@ function RuneParticles() {
 }
 
 export default function LoginPage() {
-  const { login } = useAuth();
   const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const [passkeyLoading, setPasskeyLoading] = useState(false);
   const [selectedMember, setSelectedMember] = useState<string | null>(null);
-  const [turnstileToken, setTurnstileToken] = useState('');
-  const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
   const [resetLoading, setResetLoading] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
-  const turnstileRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    (window as any).onTurnstileSuccess = (token: string) => {
-      setTurnstileToken(token);
-    };
-  }, []);
-
-  // Load and render Turnstile only when password form becomes visible
-  useEffect(() => {
-    if (!showPasswordForm) return;
-
-    const renderTurnstile = () => {
-      if ((window as any).turnstile && turnstileRef.current && !turnstileToken) {
-        (window as any).turnstile.render(turnstileRef.current, {
-          sitekey: TURNSTILE_SITE_KEY,
-          theme: 'dark',
-          callback: (token: string) => setTurnstileToken(token),
-        });
-      }
-    };
-
-    if (!(window as any).turnstile) {
-      if (!document.getElementById('turnstile-script')) {
-        const script = document.createElement('script');
-        script.id = 'turnstile-script';
-        script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
-        script.async = true;
-        script.onload = () => setTimeout(renderTurnstile, 100);
-        document.head.appendChild(script);
-      } else {
-        setTimeout(renderTurnstile, 500);
-      }
-    } else {
-      setTimeout(renderTurnstile, 100);
-    }
-  }, [showPasswordForm]);
 
   const handleQuickSelect = async (member: (typeof FAMILY_QUICK_LOGIN)[0]) => {
     setSelectedMember(member.name);
-    setEmail(member.email);
-    setPassword('');
     setError('');
-    setShowPasswordForm(false);
-    setTurnstileToken('');
-    setIsLoading(true);
 
     try {
       // Check if user has passkey registered
@@ -221,7 +167,6 @@ export default function LoginPage() {
 
       if (hasPasskey) {
         // User has passkey - prompt for passkey auth
-        setIsLoading(false);
         await attemptPasskeyAuth(member.email);
       } else if (sendMagicLink) {
         // User doesn't have passkey - send magic link automatically
@@ -232,21 +177,16 @@ export default function LoginPage() {
         });
 
         const data = await magicLinkRes.json();
-        setIsLoading(false);
 
         if (data.success) {
-          setError(''); // Clear any previous errors
-          // Show success message
+          setError('');
           alert(`Magic link sent to ${member.email}! Check your email to sign in.`);
+          setSelectedMember(null); // Reset selection
         } else {
           setError(data.error || 'Failed to send magic link');
         }
-      } else {
-        setIsLoading(false);
-        setShowPasswordForm(true);
       }
     } catch (err) {
-      setIsLoading(false);
       setError('An error occurred. Please try again.');
     }
   };
@@ -263,8 +203,7 @@ export default function LoginPage() {
       });
 
       if (!optionsRes.ok) {
-        // No passkey registered — fall back to password
-        setShowPasswordForm(true);
+        setError('Failed to get passkey options');
         setPasskeyLoading(false);
         return;
       }
@@ -272,7 +211,7 @@ export default function LoginPage() {
       const options = await optionsRes.json();
 
       if (!options.allowCredentials?.length) {
-        setShowPasswordForm(true);
+        setError('No passkey found');
         setPasskeyLoading(false);
         return;
       }
@@ -290,21 +229,19 @@ export default function LoginPage() {
       const verifyData = await verifyRes.json();
 
       if (verifyData.success) {
-        // Force full page reload to refresh auth context
         window.location.href = '/dashboard';
       } else {
         setError(verifyData.error || 'Passkey authentication failed');
-        setShowPasswordForm(true);
       }
     } catch (err: any) {
       if (err?.name === 'NotAllowedError') {
-        // User cancelled biometric — fall back to password
-        setShowPasswordForm(true);
+        setError('Passkey authentication cancelled');
       } else {
-        setShowPasswordForm(true);
+        setError('Passkey authentication failed');
       }
     } finally {
       setPasskeyLoading(false);
+      setSelectedMember(null);
     }
   };
 
@@ -343,30 +280,8 @@ export default function LoginPage() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    if (!turnstileToken) {
-      setError('Please complete the security check');
-      return;
-    }
-    setIsLoading(true);
-    const result = await login(email, password, turnstileToken);
-    if (result.success) {
-      router.push('/dashboard');
-    } else {
-      setError(result.error || 'Login failed');
-      setIsLoading(false);
-      if ((window as any).turnstile && turnstileRef.current) {
-        (window as any).turnstile.reset(turnstileRef.current);
-        setTurnstileToken('');
-      }
-    }
-  };
-
   return (
     <div className="grain-overlay min-h-screen flex items-center justify-center p-6 relative overflow-hidden">
-
       {/* Base background */}
       <div className="fixed inset-0" style={{
         background: 'radial-gradient(ellipse at 50% 30%, rgba(20,16,8,1) 0%, rgba(10,12,16,1) 60%, #000 100%)'
@@ -472,7 +387,6 @@ export default function LoginPage() {
                     <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: 1, color: isActive ? '#c9a84c' : '#d1c7b7', fontFamily: "'Cinzel', serif" }}>
                       {member.name}
                     </span>
-                    {/* Fingerprint indicator for passkey users */}
                     {isApproved && (
                       <div className="absolute top-1 right-1" title="Face ID / Touch ID">
                         <Fingerprint size={10} style={{ color: isActive ? '#c9a84c' : 'rgba(201,168,76,0.3)' }} />
@@ -494,81 +408,32 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* Password form — shown after passkey fails/cancelled or for non-passkey users */}
-          {!passkeyLoading && showPasswordForm && (
-            <>
-              <div className="flex items-center gap-3 mb-6">
-                <div className="flex-1 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(201,168,76,0.2), transparent)' }} />
-                <div className="flex gap-2">
-                  <span style={{ color: 'rgba(201,168,76,0.25)', fontSize: 12 }}>◆</span>
-                  <span style={{ color: 'rgba(201,168,76,0.15)', fontSize: 8, lineHeight: '12px' }}>●</span>
-                  <span style={{ color: 'rgba(201,168,76,0.25)', fontSize: 12 }}>◆</span>
-                </div>
-                <div className="flex-1 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(201,168,76,0.2), transparent)' }} />
-              </div>
-
-              <form onSubmit={handleSubmit} className="space-y-5">
-                <div>
-                  <label style={{ display: 'block', fontSize: 10, letterSpacing: 3, color: 'rgba(201,168,76,0.55)', marginBottom: 8, textTransform: 'uppercase', fontFamily: "'Cinzel', serif" }}>Email</label>
-                  <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@thewillsons.com" required autoComplete="email" />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: 10, letterSpacing: 3, color: 'rgba(201,168,76,0.55)', marginBottom: 8, textTransform: 'uppercase', fontFamily: "'Cinzel', serif" }}>Password</label>
-                  <div className="relative">
-                    <input type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter your password" required autoComplete="current-password" />
-                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 transition-colors" style={{ color: 'rgba(138,109,43,0.4)' }}>
-                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                    </button>
-                  </div>
-                  <div className="mt-2 text-right">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowResetModal(true);
-                        setResetEmail(email);
-                      }}
-                      className="text-xs transition-colors"
-                      style={{ 
-                        color: 'rgba(201,168,76,0.6)', 
-                        fontFamily: "'Cinzel', serif", 
-                        letterSpacing: 2,
-                        textDecoration: 'none'
-                      }}
-                    >
-                      Reset Password
-                    </button>
-                  </div>
-                </div>
-
-                {/* Turnstile */}
-                <div className="flex justify-center">
-                  {!turnstileToken ? (
-                    <div ref={turnstileRef} />
-                  ) : (
-                    <div className="flex items-center gap-2 text-xs py-2" style={{ color: 'rgba(34,197,94,0.7)', fontFamily: "'Cinzel', serif", letterSpacing: 2 }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                      Verified
-                    </div>
-                  )}
-                </div>
-
-                {error && (
-                  <div style={{ fontSize: 13, textAlign: 'center', padding: '10px 16px', borderRadius: 10, background: 'rgba(139, 37, 0, 0.12)', color: '#f87171', border: '1px solid rgba(139, 37, 0, 0.25)' }}>
-                    {error}
-                  </div>
-                )}
-
-                <button type="submit" disabled={isLoading || !email || !password} className="w-full py-4 rounded-xl font-semibold text-sm uppercase transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed" style={{ background: 'linear-gradient(135deg, #8a6d2b 0%, #c9a84c 50%, #8a6d2b 100%)', color: '#0a0c10', boxShadow: '0 4px 24px rgba(201, 168, 76, 0.15), inset 0 1px 0 rgba(232,212,139,0.3)', fontFamily: "'Cinzel', serif", letterSpacing: 4 }}>
-                  {isLoading ? <div className="w-5 h-5 border-2 border-void/30 border-t-void rounded-full animate-spin" /> : <>Enter the Realm<ChevronRight size={16} /></>}
-                </button>
-              </form>
-            </>
+          {/* Error message */}
+          {error && !passkeyLoading && (
+            <div style={{ fontSize: 13, textAlign: 'center', padding: '10px 16px', borderRadius: 10, background: 'rgba(139, 37, 0, 0.12)', color: '#f87171', border: '1px solid rgba(139, 37, 0, 0.25)', marginBottom: 16 }}>
+              {error}
+            </div>
           )}
 
+          {/* Reset password link */}
+          <div className="text-center mt-6">
+            <button
+              onClick={() => setShowResetModal(true)}
+              className="text-xs transition-colors"
+              style={{ 
+                color: 'rgba(201,168,76,0.6)', 
+                fontFamily: "'Cinzel', serif", 
+                letterSpacing: 2,
+                textDecoration: 'none'
+              }}
+            >
+              Reset Password
+            </button>
+          </div>
+
           {/* Initial state — prompt to select sigil */}
-          {!passkeyLoading && !showPasswordForm && !selectedMember && (
-            <p style={{ textAlign: 'center', fontSize: 11, letterSpacing: 2, color: 'rgba(201,168,76,0.3)', fontFamily: "'Cinzel', serif" }}>
+          {!passkeyLoading && !selectedMember && !error && (
+            <p style={{ textAlign: 'center', fontSize: 11, letterSpacing: 2, color: 'rgba(201,168,76,0.3)', fontFamily: "'Cinzel', serif", marginTop: 16 }}>
               Select your sigil above to enter
             </p>
           )}
@@ -599,10 +464,10 @@ export default function LoginPage() {
                   </svg>
                 </div>
                 <h3 className="text-xl mb-2" style={{ fontFamily: "'Cinzel', serif", color: '#c9a84c' }}>
-                  Magic Link Sent!
+                  Confirmation Email Sent!
                 </h3>
                 <p className="text-sm" style={{ color: 'rgba(201,168,76,0.6)', fontFamily: "'Cinzel', serif" }}>
-                  Check your email to sign in and setup a new passkey
+                  Check your email and click the link to confirm the passkey reset
                 </p>
               </div>
             ) : (
@@ -611,7 +476,7 @@ export default function LoginPage() {
                   Reset Password
                 </h3>
                 <p className="text-sm mb-6 text-center" style={{ color: 'rgba(201,168,76,0.6)', fontFamily: "'Cinzel', serif" }}>
-                  Enter your email to receive a magic link. You'll be prompted to setup a new passkey after signing in.
+                  Enter your email to receive a confirmation link. Your passkey will only be reset after you click the link in the email.
                 </p>
 
                 <div className="mb-6">
@@ -625,6 +490,14 @@ export default function LoginPage() {
                     placeholder="name@thewillsons.com"
                     autoComplete="email"
                     className="w-full"
+                    style={{
+                      padding: '12px 16px',
+                      borderRadius: '8px',
+                      background: 'rgba(20,22,30,0.6)',
+                      border: '1px solid rgba(107,114,128,0.2)',
+                      color: '#d1c7b7',
+                      fontFamily: "'Cinzel', serif",
+                    }}
                   />
                 </div>
 
