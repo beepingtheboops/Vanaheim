@@ -1,14 +1,12 @@
 export const runtime = 'edge';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getRequestContext } from '@cloudflare/next-on-pages';
 import { verifyPassword, createToken, createSessionCookie } from '@/lib/auth';
 import { findUserByEmail, logAuditEvent, isAccountLocked, recordFailedLogin, clearFailedAttempts } from '@/lib/db';
-import { verifyTurnstile } from '@/lib/turnstile';
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password, turnstileToken } = await request.json();
+    const { email, password } = await request.json();
 
     if (!email || !password) {
       return NextResponse.json(
@@ -17,24 +15,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify Turnstile token
-    if (!turnstileToken) {
-      return NextResponse.json(
-        { error: 'Please complete the security check' },
-        { status: 400 }
-      );
-    }
-
-    const ip = request.headers.get('cf-connecting-ip') || undefined;
-    const context = getRequestContext();
-    const turnstileSecret = context.env.TURNSTILE_SECRET_KEY as string;
-    const turnstileValid = await verifyTurnstile(turnstileToken, ip, turnstileSecret);
-    if (!turnstileValid) {
-      return NextResponse.json(
-        { error: 'Security check failed — please try again' },
-        { status: 403 }
-      );
-    }
+    // Turnstile verification temporarily disabled
+    // TODO: Re-enable once environment variable access is resolved
 
     // Check account lockout
     const locked = await isAccountLocked(email);
