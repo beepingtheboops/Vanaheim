@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
-export default function MagicLinkPage() {
+function MagicLinkContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [status, setStatus] = useState<'verifying' | 'success' | 'error'>('verifying');
@@ -103,5 +103,17 @@ export default function MagicLinkPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function MagicLinkPage() {
+  return (
+    <Suspense fallback={
+      <div className="grain-overlay min-h-screen bg-void flex items-center justify-center p-6">
+        <div className="w-16 h-16 border-4 border-gold/30 border-t-gold rounded-full animate-spin" />
+      </div>
+    }>
+      <MagicLinkContent />
+    </Suspense>
   );
 }
