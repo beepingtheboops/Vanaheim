@@ -1,4 +1,4 @@
-// Email service using Mailchannels API (free, no credentials needed)
+// Email service using Resend API
 
 interface EmailOptions {
   to: string;
@@ -9,36 +9,35 @@ interface EmailOptions {
 
 export async function sendEmail(options: EmailOptions): Promise<boolean> {
   try {
-    const response = await fetch('https://api.mailchannels.net/tx/v1/send', {
+    const RESEND_API_KEY = process.env.RESEND_API_KEY;
+    
+    if (!RESEND_API_KEY) {
+      console.error('RESEND_API_KEY environment variable is not set');
+      return false;
+    }
+
+    const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
+        'Authorization': `Bearer ${RESEND_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        personalizations: [
-          {
-            to: [{ email: options.to }],
-          },
-        ],
-        from: {
-          email: 'no-reply@thewillsons.com',
-          name: 'Vanaheim',
-        },
+        from: 'Vanaheim <no-reply@thewillsons.com>',
+        to: [options.to],
         subject: options.subject,
-        content: [
-          {
-            type: 'text/plain',
-            value: options.text,
-          },
-          {
-            type: 'text/html',
-            value: options.html,
-          },
-        ],
+        text: options.text,
+        html: options.html,
       }),
     });
 
-    return response.ok;
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Resend API error:', response.status, errorText);
+      return false;
+    }
+
+    return true;
   } catch (error) {
     console.error('Email send error:', error);
     return false;
