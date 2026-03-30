@@ -1,6 +1,7 @@
 export const runtime = 'edge';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getRequestContext } from '@cloudflare/next-on-pages';
 import { verifyPassword, createToken, createSessionCookie } from '@/lib/auth';
 import { findUserByEmail, logAuditEvent, isAccountLocked, recordFailedLogin, clearFailedAttempts } from '@/lib/db';
 import { verifyTurnstile } from '@/lib/turnstile';
@@ -25,7 +26,9 @@ export async function POST(request: NextRequest) {
     }
 
     const ip = request.headers.get('cf-connecting-ip') || undefined;
-    const turnstileValid = await verifyTurnstile(turnstileToken, ip, process.env.TURNSTILE_SECRET_KEY);
+    const context = getRequestContext();
+    const turnstileSecret = context.env.TURNSTILE_SECRET_KEY as string;
+    const turnstileValid = await verifyTurnstile(turnstileToken, ip, turnstileSecret);
     if (!turnstileValid) {
       return NextResponse.json(
         { error: 'Security check failed — please try again' },
