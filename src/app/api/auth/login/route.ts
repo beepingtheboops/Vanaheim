@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     }
 
     const ip = request.headers.get('cf-connecting-ip') || undefined;
-    const turnstileValid = await verifyTurnstile(turnstileToken, ip);
+    const turnstileValid = await verifyTurnstile(turnstileToken, ip, process.env.TURNSTILE_SECRET_KEY);
     if (!turnstileValid) {
       return NextResponse.json(
         { error: 'Security check failed — please try again' },
