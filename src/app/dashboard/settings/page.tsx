@@ -113,7 +113,7 @@ export default function SettingsPage() {
 
   if (loading || !user) return null;
 
-  const APPROVED_EMAILS = ['matt@thewillsons.com', 'noonie@thewillsons.com', 'odin@thewillsons.com', 'abbat@thewillsons.com'];
+  const APPROVED_EMAILS = ['mattwillson@outlook.com', 'laurentalbott90@gmail.com', 'odinwillson@gmail.com', 'sbkwillson@hotmail.com'];
   const canRegisterPasskey = APPROVED_EMAILS.includes(user.email);
 
   return (
