@@ -145,10 +145,10 @@ export default function SettingsPage() {
         <div className="flex items-center gap-4 mb-8">
           <button
             onClick={() => router.push('/dashboard')}
-            className="flex items-center gap-2 text-sm transition-colors"
-            style={{ color: 'rgba(201,168,76,0.5)', fontFamily: "'Cinzel', serif", letterSpacing: 1 }}
+            className="flex items-center gap-2 text-base transition-colors"
+            style={{ color: 'rgba(201,168,76,0.75)', fontFamily: "'Cinzel', serif", letterSpacing: 1 }}
           >
-            <ChevronLeft size={16} />
+            <ChevronLeft size={20} />
             Dashboard
           </button>
         </div>
@@ -250,7 +250,7 @@ export default function SettingsPage() {
                     className="p-2 rounded-lg transition-colors hover:bg-red-500/10"
                     title="Remove passkey"
                   >
-                    <Trash2 size={14} style={{ color: 'rgba(239,68,68,0.5)' }} />
+                    <Trash2 size={18} style={{ color: 'rgba(239,68,68,0.7)' }} />
                   </button>
                 </div>
               ))}

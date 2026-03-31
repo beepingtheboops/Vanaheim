@@ -85,7 +85,7 @@ function OdinIcon({ active }: { active: boolean }) {
 const iconMap: Record<string, React.FC<{ active: boolean }>> = {
   dad: DadIcon,
   noonie: NoonieIcon,
-  abbat: AbbatIcon,
+  abbat: DadIcon,  // Abbat uses same icon as Dad
   odin: OdinIcon,
 };
 
@@ -150,6 +150,30 @@ export default function LoginPage() {
   const [resetEmail, setResetEmail] = useState('');
   const [resetLoading, setResetLoading] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
+  const [usersWithPasskeys, setUsersWithPasskeys] = useState<Set<string>>(new Set());
+
+  // Fetch which users have passkeys on mount
+  useEffect(() => {
+    const checkPasskeys = async () => {
+      const results = await Promise.all(
+        FAMILY_QUICK_LOGIN.map(async (member) => {
+          try {
+            const res = await fetch('/api/auth/check-passkey', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email: member.email }),
+            });
+            const data = await res.json();
+            return data.hasPasskey ? member.email : null;
+          } catch {
+            return null;
+          }
+        })
+      );
+      setUsersWithPasskeys(new Set(results.filter(Boolean) as string[]));
+    };
+    checkPasskeys();
+  }, []);
 
   const handleQuickSelect = async (member: (typeof FAMILY_QUICK_LOGIN)[0]) => {
     setSelectedMember(member.name);
@@ -370,7 +394,7 @@ export default function LoginPage() {
               {FAMILY_QUICK_LOGIN.map((member) => {
                 const IconComponent = iconMap[member.icon];
                 const isActive = selectedMember === member.name;
-                const isApproved = PASSKEY_EMAILS.includes(member.email);
+                const hasPasskey = usersWithPasskeys.has(member.email);
                 return (
                   <button
                     key={member.name}
@@ -387,7 +411,7 @@ export default function LoginPage() {
                     <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: 1, color: isActive ? '#c9a84c' : '#d1c7b7', fontFamily: "'Cinzel', serif" }}>
                       {member.name}
                     </span>
-                    {isApproved && (
+                    {hasPasskey && (
                       <div className="absolute top-1 right-1" title="Face ID / Touch ID">
                         <Fingerprint size={10} style={{ color: isActive ? '#c9a84c' : 'rgba(201,168,76,0.3)' }} />
                       </div>
