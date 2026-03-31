@@ -81,10 +81,10 @@ export async function isPasswordInvalidated(user: StoredUser): Promise<boolean> 
 
 // Approved users who can register passkeys
 export const PASSKEY_APPROVED_EMAILS = [
-  'matt@thewillsons.com',
-  'noonie@thewillsons.com',
-  'odin@thewillsons.com',
-  'abbat@thewillsons.com',
+  'mattwillson@outlook.com',
+  'laurentalbott90@gmail.com',
+  'odinwillson@gmail.com',
+  'sbkwillson@hotmail.com',
 ];
 
 export async function getPasskeysForUser(userId: string): Promise<StoredPasskey[]> {
