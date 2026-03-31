@@ -30,6 +30,19 @@ export default function SettingsPage() {
     if (user) fetchPasskeys();
   }, [user]);
 
+  // Auto-trigger passkey registration when redirected from magic link
+  useEffect(() => {
+    if (user && !loadingPasskeys && passkeys.length === 0) {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('setup') === 'passkey') {
+        // Clear the URL parameter
+        window.history.replaceState({}, '', '/dashboard/settings');
+        // Auto-trigger registration
+        registerPasskey();
+      }
+    }
+  }, [user, loadingPasskeys, passkeys]);
+
   const fetchPasskeys = async () => {
     try {
       const res = await fetch('/api/auth/passkey/list');
@@ -76,6 +89,14 @@ export default function SettingsPage() {
       if (verifyData.verified) {
         setMessage({ type: 'success', text: 'Passkey registered successfully. Your password has been disabled — use Face ID / Touch ID to sign in.' });
         await fetchPasskeys();
+        
+        // If this was first-time setup (from magic link), redirect to dashboard
+        const wasFirstSetup = passkeys.length === 0;
+        if (wasFirstSetup) {
+          setTimeout(() => {
+            router.push('/dashboard');
+          }, 1500); // Brief delay to show success message
+        }
       } else {
         setMessage({ type: 'error', text: verifyData.error || 'Registration failed' });
       }
