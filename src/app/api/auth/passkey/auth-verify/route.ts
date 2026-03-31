@@ -56,9 +56,9 @@ export async function POST(request: NextRequest) {
       expectedChallenge,
       expectedOrigin: ORIGIN,
       expectedRPID: RP_ID,
-      credential: {
-        id: passkey.credential_id,
-        publicKey: new Uint8Array(publicKeyBuffer),
+      authenticator: {
+        credentialID: isoBase64URL.toBuffer(passkey.credential_id),
+        credentialPublicKey: new Uint8Array(publicKeyBuffer),
         counter: passkey.counter ?? 0,
         transports: passkey.transports ? JSON.parse(passkey.transports) : undefined,
       },
