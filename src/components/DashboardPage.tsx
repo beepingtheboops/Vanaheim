@@ -324,7 +324,6 @@ export default function DashboardPage() {
             <Bell size={18} className="text-bone/50" />
           </button>
           <div className="flex items-center gap-3 px-4 py-2 rounded-xl bg-smoke/40">
-            <span className="text-xl">{user.avatar}</span>
             <div>
               <p className="text-sm font-medium text-bone">{user.name}</p>
               <p className="text-xs text-gold-dark/60">{user.role}</p>
@@ -531,9 +530,8 @@ export default function DashboardPage() {
                   <div className="flex items-center justify-between p-3 rounded-xl"
                     style={{ background: 'rgba(30,34,45,0.4)' }}>
                     <div className="flex items-center gap-3">
-                      <span className="text-xl">{user.avatar}</span>
                       <div>
-                        <p className="text-sm font-medium text-bone">Matt</p>
+                        <p className="text-sm font-medium text-bone">{user.name}</p>
                         <p className="text-xs" style={{ color: isHome ? '#22c55e' : '#64748b' }}>
                           {person ? capitalize(person.state) : '—'}
                         </p>
