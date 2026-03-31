@@ -5,9 +5,9 @@ import { findUserByEmail, createMagicLinkToken, logAuditEvent } from '@/lib/db';
 import { sendEmail, generateMagicLinkEmail } from '@/lib/email';
 
 const ALLOWED_EMAILS = [
-  'matt@thewillsons.com',
-  'noonie@thewillsons.com',
-  'abbat@thewillsons.com',
+  'mattwillson@outlook.com',
+  'laurentalbott90@gmail.com',
+  'sbkwillson@hotmail.com',
   'odin@thewillsons.com',
 ];
 
