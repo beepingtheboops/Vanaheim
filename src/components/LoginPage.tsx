@@ -8,10 +8,10 @@ const FAMILY_QUICK_LOGIN = [
   { name: 'Dad', email: 'mattwillson@outlook.com', icon: 'dad' },
   { name: 'Noonie', email: 'laurentalbott90@gmail.com', icon: 'noonie' },
   { name: 'Abbat', email: 'sbkwillson@hotmail.com', icon: 'abbat' },
-  { name: 'Odin', email: 'odin@thewillsons.com', icon: 'odin' },
+  { name: 'Odin', email: 'odinwillson@gmail.com', icon: 'odin' },
 ];
 
-const PASSKEY_EMAILS = ['mattwillson@outlook.com', 'laurentalbott90@gmail.com', 'odin@thewillsons.com', 'sbkwillson@hotmail.com'];
+const PASSKEY_EMAILS = ['mattwillson@outlook.com', 'laurentalbott90@gmail.com', 'odinwillson@gmail.com', 'sbkwillson@hotmail.com'];
 
 function DadIcon({ active }: { active: boolean }) {
   const c = active ? '#c9a84c' : '#6b7280';

@@ -8,7 +8,7 @@ const ALLOWED_EMAILS = [
   'mattwillson@outlook.com',
   'laurentalbott90@gmail.com',
   'sbkwillson@hotmail.com',
-  'odin@thewillsons.com',
+  'odinwillson@gmail.com',
 ];
 
 export async function POST(request: NextRequest) {
