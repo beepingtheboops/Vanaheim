@@ -51,6 +51,10 @@ export async function POST(request: NextRequest) {
     const publicKeyBuffer = isoBase64URL.toBuffer(passkey.public_key);
     console.log('public key buffer length:', publicKeyBuffer.length);
  
+    // For multiDevice credentials, use counter 0 to allow flexible counter handling
+    // This prevents counter sync issues when the same passkey is used across devices
+    const counterValue = passkey.device_type === 'multiDevice' ? 0 : (passkey.counter ?? 0);
+ 
     const verifyOpts: any = {
       response: body,
       expectedChallenge,
@@ -59,7 +63,7 @@ export async function POST(request: NextRequest) {
       authenticator: {
         credentialID: isoBase64URL.toBuffer(passkey.credential_id),
         credentialPublicKey: new Uint8Array(publicKeyBuffer),
-        counter: passkey.counter ?? 0,
+        counter: counterValue,
         transports: passkey.transports ? JSON.parse(passkey.transports) : undefined,
       },
       requireUserVerification: true,
@@ -73,7 +77,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Passkey verification failed' }, { status: 401 });
     }
  
-    const newCounter = (passkey.counter ?? 0) + 1;
+    // Update counter using the value from the authentication response
+    const newCounter = verification.authenticationInfo.newCounter;
     await updatePasskeyCounter(passkey.credential_id, newCounter);
     await logAuditEvent(user.id, 'passkey_login', null, null);
  
