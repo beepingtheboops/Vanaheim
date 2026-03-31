@@ -20,8 +20,8 @@ export default {
       });
     }
 
-    // Block unknown origins
-    if (!allowed.includes(origin)) {
+    // Block unknown origins (but allow server-to-server with no origin)
+    if (origin && !allowed.includes(origin)) {
       return new Response('Forbidden', { status: 403 });
     }
 
@@ -59,7 +59,7 @@ export default {
       status: haResponse.status,
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Origin': origin || '*',
         'Access-Control-Allow-Credentials': 'true',
       },
     });
