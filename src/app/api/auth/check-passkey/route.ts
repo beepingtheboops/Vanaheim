@@ -4,10 +4,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { findUserByEmail, getPasskeysForUser } from '@/lib/db';
 
 const ALLOWED_EMAILS = [
-  'matt@thewillsons.com',
-  'noonie@thewillsons.com',
-  'abbat@thewillsons.com',
-  'odin@thewillsons.com',
+  'mattwillson@outlook.com',
+  'laurentalbott90@gmail.com',
+  'sbkwillson@hotmail.com',
+  'odinwillson@gmail.com',
 ];
 
 export async function POST(request: NextRequest) {
