@@ -7,6 +7,3 @@ compatibility_flags = ["nodejs_compat"]
 binding = "DB"
 database_name = "vanaheim-db"
 database_id = "a80343ec-10cf-4212-b3eb-64c670e58d17"
-
-[vars]
-JWT_SECRET = "zjsr3UPasmugjH12MGK+TIcd5zDexikQ5EXiYAcJYPU="
